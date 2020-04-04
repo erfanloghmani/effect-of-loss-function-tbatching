@@ -31,7 +31,7 @@ if args.train_proportion > 0.8:
 if args.gpu == -1:
     args.gpu = select_free_gpu()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
