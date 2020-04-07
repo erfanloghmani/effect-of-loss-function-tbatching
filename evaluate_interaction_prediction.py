@@ -34,7 +34,7 @@ if args.network == "mooc":
 # SET GPU
 args.gpu = select_free_gpu()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
 output_fname = "results/interaction_prediction_%s.txt" % args.network
