@@ -32,7 +32,8 @@ if args.network == "mooc":
     sys.exit(0)
 
 # SET GPU
-args.gpu = select_free_gpu()
+if args.gpu == -1:
+    args.gpu = select_free_gpu()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
