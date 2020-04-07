@@ -18,6 +18,7 @@ parser.add_argument('--network', required=True, help='Name of the network/datase
 parser.add_argument('--model', default="jodie", help='Model name to save output in file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epochs', default=50, type=int, help='Number of epochs to train the model')
+parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions of the dynamic embedding')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Fraction of interactions (from the beginning) that are used for training.The next 10% are used for validation and the next 10% for testing')
 parser.add_argument('--state_change', default=True, type=bool, help='True if training with state change of users along with interaction prediction. False otherwise. By default, set to True.')
@@ -80,6 +81,21 @@ user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors
 # INITIALIZE MODEL
 learning_rate = 1e-3
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+
+if (args.init_epoch >= 0):
+    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch)
+    set_embeddings_training_end(user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, user_sequence_id, item_sequence_id, train_end_idx)
+
+    # LOAD THE EMBEDDINGS: DYNAMIC AND STATIC
+    item_embeddings = item_embeddings_dystat[:, :args.embedding_dim]
+    item_embeddings = item_embeddings.clone()
+    item_embeddings_static = item_embeddings_dystat[:, args.embedding_dim:]
+    item_embeddings_static = item_embeddings_static.clone()
+
+    user_embeddings = user_embeddings_dystat[:, :args.embedding_dim]
+    user_embeddings = user_embeddings.clone()
+    user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
+    user_embeddings_static = user_embeddings_static.clone()
 
 # RUN THE JODIE MODEL
 '''
