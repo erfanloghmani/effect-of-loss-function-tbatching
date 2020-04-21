@@ -13,6 +13,7 @@ $ ./evaluate_all_epochs.sh reddit state
 
 network=$1
 type=$2
+gpu=$3
 interaction="interaction"
 
 idx=0
@@ -20,9 +21,9 @@ while [ $idx -le 49 ]
 do
     echo $idx
     if [ $type == "$interaction" ]; then
-	python2.7 evaluate_interaction_prediction.py --network $network --model jodie --epoch ${idx}
+	python2.7 evaluate_interaction_prediction.py --network $network --model jodie --epoch ${idx} --gpu ${gpu}
     else
-	python2.7 evaluate_state_change_prediction.py --network $network --model jodie --epoch ${idx}
+	python2.7 evaluate_state_change_prediction.py --network $network --model jodie --epoch ${idx} --gpu ${gpu}
     fi
     (( idx+=1 ))
 done 
