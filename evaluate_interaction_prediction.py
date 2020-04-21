@@ -205,8 +205,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/validation_ranks.json', 'w'))
-json.dump(test_ranks, open('results/test_ranks.json', 'w'))
+json.dump(validation_ranks, open('results/validation_ranks_%s.json' % args.epoch, 'w'))
+json.dump(test_ranks, open('results/test_ranks_%s.json' % args.epoch, 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
