@@ -18,8 +18,6 @@ while True:
 
         if len(words) <= 2:
             break
-
-        print(len(words), words)
         gpu_used[words[1]] += int(words[5][:-3])
 
     if counter % 60 == 0:
@@ -28,7 +26,7 @@ while True:
 
     found = False
     for key, value in gpu_used.items():
-        if value < 11000:
+        if value < 6000:
             found = True
             with open('stdout-%s.txt' % counter, 'w') as f:
                 process = subprocess.Popen(['/home/eloghmani/myjodie/evaluate_all_epochs.sh', 'lastfm', 'interaction', key],
