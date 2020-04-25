@@ -31,7 +31,7 @@ while True:
         if value < 11000:
             found = True
             with open('stdout-%s.txt' % counter, 'w') as f:
-                process = subprocess.Popen(['/home/eloghmani/myjodie/evaluate_all_epochs.sh'],
+                process = subprocess.Popen(['/home/eloghmani/myjodie/evaluate_all_epochs.sh', 'lastfm', 'interaction', key],
                                            stdout=f,
                                            stderr=f)
     if found:
