@@ -32,5 +32,6 @@ while True:
                 process = subprocess.Popen(['/home/eloghmani/myjodie/evaluate_all_epochs.sh', 'lastfm', 'interaction', key],
                                            stdout=f,
                                            stderr=f)
+            break
     if found:
         break

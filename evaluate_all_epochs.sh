@@ -14,9 +14,9 @@ $ ./evaluate_all_epochs.sh reddit state
 network=$1
 type=$2
 gpu=$3
+idx=${4-0}
 interaction="interaction"
 
-idx=0
 while [ $idx -le 49 ]
 do
     echo $idx
