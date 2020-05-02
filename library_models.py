@@ -67,7 +67,7 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, 2 * (self.item_static_embedding_size + self.embedding_dim) + 1)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
         
@@ -129,10 +129,10 @@ def reinitialize_tbatches():
 
 
 # CALCULATE LOSS FOR THE PREDICTED USER STATE 
-def calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_time_series, y_true, loss_function):
+def calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_time_series, y_true, loss_function, device):
     # PREDCIT THE LABEL FROM THE USER DYNAMIC EMBEDDINGS
     prob = model.predict_label(user_embeddings_time_series[tbatch_interactionids,:])
-    y = Variable(torch.LongTensor(y_true).cuda()[tbatch_interactionids])
+    y = Variable(torch.LongTensor(y_true).to(device)[tbatch_interactionids])
     
     loss = loss_function(prob, y)
 
@@ -159,28 +159,28 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    filename = os.path.join(directory, "checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
+    filename = os.path.join(directory, "multimode-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
     torch.save(state, filename)
     print "*** Saved embeddings and model to file: %s ***\n\n" % filename
 
 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
-def load_model(model, optimizer, args, epoch):
+def load_model(model, optimizer, args, epoch, device):
     modelname = args.model
-    filename = PATH + "saved_models/%s/checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
+    filename = PATH + "saved_models/%s/multimode-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
     print "Loading saved embeddings and model: %s" % filename
     args.start_epoch = checkpoint['epoch']
-    user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).cuda())
-    item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).cuda())
+    user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).to(device))
+    item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).to(device))
     try:
         train_end_idx = checkpoint['train_end_idx'] 
     except KeyError:
         train_end_idx = None
 
     try:
-        user_embeddings_time_series = Variable(torch.from_numpy(checkpoint['user_embeddings_time_series']).cuda())
-        item_embeddings_time_series = Variable(torch.from_numpy(checkpoint['item_embeddings_time_series']).cuda())
+        user_embeddings_time_series = Variable(torch.from_numpy(checkpoint['user_embeddings_time_series']).to(device))
+        item_embeddings_time_series = Variable(torch.from_numpy(checkpoint['item_embeddings_time_series']).to(device))
     except:
         user_embeddings_time_series = None
         item_embeddings_time_series = None

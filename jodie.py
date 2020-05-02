@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--network', required=True, help='Name of the network/dataset')
 parser.add_argument('--model', default="jodie", help='Model name to save output in file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
+parser.add_argument('--device', default='gpu', type=str, help='Which device to use')
 parser.add_argument('--epochs', default=50, type=int, help='Number of epochs to train the model')
 parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions of the dynamic embedding')
@@ -29,10 +30,11 @@ if args.train_proportion > 0.8:
     sys.exit('Training sequence proportion cannot be greater than 0.8.')
 
 # SET GPU
-if args.gpu == -1:
-    args.gpu = select_free_gpu()
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+if args.device == 'gpu':
+    if args.gpu == -1:
+        args.gpu = select_free_gpu()
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
@@ -50,6 +52,8 @@ train_end_idx = validation_start_idx = int(num_interactions * args.train_proport
 test_start_idx = int(num_interactions * (args.train_proportion + 0.1))
 test_end_idx = int(num_interactions * (args.train_proportion + 0.2))
 
+device = torch.device(args.device)
+
 # SET BATCHING TIMESPAN
 '''
 Timespan is the frequency at which the batches are created and the JODIE model is trained.
@@ -62,28 +66,29 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL AND PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
-weight = torch.Tensor([1, true_labels_ratio]).cuda()
+model = JODIE(args, num_features, num_users, num_items).to(device)
+weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELossNoReduce = nn.MSELoss(reduction='none')
 
 # INITIALIZE EMBEDDING
-initial_user_embedding = nn.Parameter(F.normalize(torch.rand(args.embedding_dim).cuda(), dim=0))  # the initial user and item embeddings are learned during training as well
-initial_item_embedding = nn.Parameter(F.normalize(torch.rand(args.embedding_dim).cuda(), dim=0))
+initial_user_embedding = nn.Parameter(F.normalize(torch.rand(args.embedding_dim).to(device), dim=0))  # the initial user and item embeddings are learned during training as well
+initial_item_embedding = nn.Parameter(F.normalize(torch.rand(args.embedding_dim).to(device), dim=0))
 model.initial_user_embedding = initial_user_embedding
 model.initial_item_embedding = initial_item_embedding
 
 user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all users to the same embedding
 item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all items to the same embedding
-item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
-user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
+item_embedding_static = Variable(torch.eye(num_items).to(device))  # one-hot vectors for static embeddings
+user_embedding_static = Variable(torch.eye(num_users).to(device))  # one-hot vectors for static embeddings
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
 if (args.init_epoch >= 0):
-    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch)
+    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch, device)
     set_embeddings_training_end(user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, user_sequence_id, item_sequence_id, train_end_idx)
 
     # LOAD THE EMBEDDINGS: DYNAMIC AND STATIC
@@ -97,6 +102,8 @@ if (args.init_epoch >= 0):
     user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
     user_embeddings_static = user_embeddings_static.clone()
 
+logfile = open('log.txt', 'w')
+
 # RUN THE JODIE MODEL
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
@@ -107,8 +114,8 @@ with trange(args.epochs) as progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
 
         # INITIALIZE EMBEDDING TRAJECTORY STORAGE
-        user_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).cuda())
-        item_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).cuda())
+        user_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).to(device))
+        item_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).to(device))
 
         optimizer.zero_grad()
         reinitialize_tbatches()
@@ -159,13 +166,13 @@ with trange(args.epochs) as progress_bar1:
                             total_interaction_count += len(lib.current_tbatches_interactionids[i])
 
                             # LOAD THE CURRENT TBATCH
-                            tbatch_userids = torch.LongTensor(lib.current_tbatches_user[i]).cuda()  # Recall "lib.current_tbatches_user[i]" has unique elements
-                            tbatch_itemids = torch.LongTensor(lib.current_tbatches_item[i]).cuda()  # Recall "lib.current_tbatches_item[i]" has unique elements
-                            tbatch_interactionids = torch.LongTensor(lib.current_tbatches_interactionids[i]).cuda()
-                            feature_tensor = Variable(torch.Tensor(lib.current_tbatches_feature[i]).cuda())  # Recall "lib.current_tbatches_feature[i]" is list of list, so "feature_tensor" is a 2-d tensor
-                            user_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_user_timediffs[i]).cuda()).unsqueeze(1)
-                            item_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_item_timediffs[i]).cuda()).unsqueeze(1)
-                            tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).cuda()
+                            tbatch_userids = torch.LongTensor(lib.current_tbatches_user[i]).to(device)  # Recall "lib.current_tbatches_user[i]" has unique elements
+                            tbatch_itemids = torch.LongTensor(lib.current_tbatches_item[i]).to(device)  # Recall "lib.current_tbatches_item[i]" has unique elements
+                            tbatch_interactionids = torch.LongTensor(lib.current_tbatches_interactionids[i]).to(device)
+                            feature_tensor = Variable(torch.Tensor(lib.current_tbatches_feature[i]).to(device))  # Recall "lib.current_tbatches_feature[i]" is list of list, so "feature_tensor" is a 2-d tensor
+                            user_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_user_timediffs[i]).to(device)).unsqueeze(1)
+                            item_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_item_timediffs[i]).to(device)).unsqueeze(1)
+                            tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).to(device)
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
@@ -174,11 +181,17 @@ with trange(args.epochs) as progress_bar1:
                             user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
-                            predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
+                            prediction_result = model.predict_item_embedding(user_item_embedding)
+                            prediction_size = args.embedding_dim + num_items
+                            predicted_item_embedding_1 = prediction_result[:, :prediction_size]
+                            predicted_item_embedding_2 = prediction_result[:, prediction_size:2*prediction_size]
+                            pi_1 = prediction_result[:, 2*prediction_size]
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
+                            loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
+                            loss += loss_1.dot(pi_1) + loss_2.dot(1 - pi_1)
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
@@ -196,7 +209,7 @@ with trange(args.epochs) as progress_bar1:
 
                             # CALCULATE STATE CHANGE LOSS
                             if args.state_change:
-                                loss += calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_timeseries, y_true, crossEntropyLoss)
+                                loss += calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_timeseries, y_true, crossEntropyLoss, device)
 
                     # BACKPROPAGATE ERROR AFTER END OF T-BATCH
                     total_loss += loss.item()
