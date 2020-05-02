@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--network', required=True, help='Name of the network/dataset')
 parser.add_argument('--model', default="jodie", help='Model name to save output in file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
-parser.add_argument('--device', default='gpu', type=str, help='Which device to use')
+parser.add_argument('--device', default='cuda', type=str, help='Which device to use')
 parser.add_argument('--epochs', default=50, type=int, help='Number of epochs to train the model')
 parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions of the dynamic embedding')
@@ -30,7 +30,7 @@ if args.train_proportion > 0.8:
     sys.exit('Training sequence proportion cannot be greater than 0.8.')
 
 # SET GPU
-if args.device == 'gpu':
+if args.device == 'cuda':
     if args.gpu == -1:
         args.gpu = select_free_gpu()
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
