@@ -29,7 +29,7 @@ while True:
         if value < 6000:
             found = True
             with open('stdout-%s.txt' % counter, 'w') as f:
-                process = subprocess.Popen(['python', '/home/eloghmani/myjodie/jodie.py', '--netowrk', 'lastfm',
+                process = subprocess.Popen(['python', '/home/eloghmani/myjodie/jodie.py', '--network', 'lastfm',
                                             '--model', 'jodie', '--epochs', '50', '--gpu', key],
                                            stdout=f,
                                            stderr=f)
