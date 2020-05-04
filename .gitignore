@@ -107,3 +107,4 @@ venv.bak/
 *.sublime-project
 *.sublime-workspace
 data/
+log.txt
