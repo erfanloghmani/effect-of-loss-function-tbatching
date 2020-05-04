@@ -108,6 +108,7 @@ logfile = open('log.txt', 'w')
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
+
 print "*** Training the JODIE model for %d epochs ***" % args.epochs
 with trange(args.epochs) as progress_bar1:
     for ep in progress_bar1:
@@ -185,7 +186,7 @@ with trange(args.epochs) as progress_bar1:
                             prediction_size = args.embedding_dim + num_items
                             predicted_item_embedding_1 = prediction_result[:, :prediction_size]
                             predicted_item_embedding_2 = prediction_result[:, prediction_size:2*prediction_size]
-                            pi_1 = prediction_result[:, 2*prediction_size]
+                            pi_1 = torch.sigmoid(prediction_result[:, 2*prediction_size])
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
