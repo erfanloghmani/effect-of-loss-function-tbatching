@@ -166,9 +166,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         pi_1 = torch.sigmoid(prediction_result[:, 2 * prediction_size])
 
         # CALCULATE PREDICTION LOSS
-        item_embedding_input = item_embeddings[tbatch_itemids, :]
-        loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
-        loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
+        loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
+        loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
         loss += loss_1.dot(pi_1) + loss_2.dot(1 - pi_1)
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
