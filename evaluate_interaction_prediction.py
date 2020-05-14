@@ -38,7 +38,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/interaction_prediction_%s.txt" % args.network
+output_fname = "results/multimode_interaction_prediction_%s.txt" % args.network
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
