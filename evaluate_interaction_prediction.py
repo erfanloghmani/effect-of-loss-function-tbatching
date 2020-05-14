@@ -82,6 +82,7 @@ model = JODIE(args, num_features, num_users, num_items).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELossNoReduce = nn.MSELoss(reduction='none')
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
@@ -153,19 +154,34 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
         user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
 
-        # PREDICT ITEM EMBEDDING
-        predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
+        # PREDICT NEXT ITEM EMBEDDING
+        prediction_result = model.predict_item_embedding(user_item_embedding)
+        prediction_size = args.embedding_dim + num_items
+        predicted_item_embedding_1 = prediction_result[:, :prediction_size]
+        predicted_item_embedding_2 = prediction_result[:, prediction_size:2 * prediction_size]
+        pi_1 = torch.sigmoid(prediction_result[:, 2 * prediction_size])
 
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        item_embedding_input = item_embeddings[tbatch_itemids, :]
+        loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
+        loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
+        loss += loss_1.dot(pi_1) + loss_2.dot(1 - pi_1)
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+        euclidean_distances_1 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_1.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
+        euclidean_distances_2 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_2.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
+        sum_euclidean_distances = pi_1 * euclidean_distances_1 + (1 - pi_1) * euclidean_distances_2
+        print(predicted_item_embedding_1.shape, predicted_item_embedding_1)
+        print(euclidean_distances_1.shape, euclidean_distances_1)
+        print(sum_euclidean_distances.shape, sum_euclidean_distances)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-        true_item_distance = euclidean_distances[itemid]
-        euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
+        true_item_distance = sum_euclidean_distances[itemid]
+        euclidean_distances_smaller = (sum_euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
+
+        print(true_item_distance)
+        print(true_item_rank)
 
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
@@ -205,8 +221,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/validation_ranks_%s.json' % args.epoch, 'w'))
-json.dump(test_ranks, open('results/test_ranks_%s.json' % args.epoch, 'w'))
+json.dump(validation_ranks, open('results/multimode_validation_ranks_%s.json' % args.epoch, 'w'))
+json.dump(test_ranks, open('results/multimode_test_ranks_%s.json' % args.epoch, 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
