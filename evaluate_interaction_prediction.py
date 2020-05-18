@@ -40,7 +40,7 @@ if args.device == 'cuda':
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/multimode_interaction_prediction_%s.txt" % args.network
+output_fname = "results/multimode_check_interaction_prediction_%s.txt" % args.network
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
@@ -114,6 +114,8 @@ user_embeddings_static = user_embeddings_static.clone()
 # PERFORMANCE METRICS
 validation_ranks = []
 test_ranks = []
+validation_distance_metrics = []
+test_distance_metrics = []
 
 '''
 Here we use the trained model to make predictions for the validation and testing interactions.
@@ -174,22 +176,30 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         euclidean_distances_1 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_1.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
         euclidean_distances_2 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_2.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
         sum_euclidean_distances = pi_1 * euclidean_distances_1 + (1 - pi_1) * euclidean_distances_2
-        print(predicted_item_embedding_1.shape, predicted_item_embedding_1)
-        print(euclidean_distances_1.shape, euclidean_distances_1)
-        print(sum_euclidean_distances.shape, sum_euclidean_distances)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         true_item_distance = sum_euclidean_distances[itemid]
         euclidean_distances_smaller = (sum_euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
-        print(true_item_distance)
-        print(true_item_rank)
-
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
+            validation_distance_metrics.append({
+                'pi': pi_1.item(),
+                'true_euclidean_distances_1': euclidean_distances_1[itemid].item(),
+                'true_euclidean_distances_2': euclidean_distances_2[itemid].item(),
+                'true_item_distance': true_item_distance,
+                'true_item_rank': true_item_rank
+            })
         else:
             test_ranks.append(true_item_rank)
+            test_distance_metrics.append({
+                'pi': pi_1.item(),
+                'true_euclidean_distances_1': euclidean_distances_1[itemid].item(),
+                'true_euclidean_distances_2': euclidean_distances_2[itemid].item(),
+                'true_item_distance': true_item_distance,
+                'true_item_rank': true_item_rank
+            })
 
         # UPDATE USER AND ITEM EMBEDDING
         user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
@@ -207,7 +217,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # CALCULATE STATE CHANGE LOSS
         if args.state_change:
-            loss += calculate_state_prediction_loss(model, [j], user_embeddings_timeseries, y_true, crossEntropyLoss)
+            loss += calculate_state_prediction_loss(model, [j], user_embeddings_timeseries, y_true, crossEntropyLoss, device)
 
         # UPDATE THE MODEL IN REAL-TIME USING ERRORS MADE IN THE PAST PREDICTION
         if timestamp - tbatch_start_time > tbatch_timespan:
@@ -224,8 +234,12 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/multimode_validation_ranks_%s.json' % args.epoch, 'w'))
-json.dump(test_ranks, open('results/multimode_test_ranks_%s.json' % args.epoch, 'w'))
+json.dump(validation_ranks, open('results/multimode_check_validation_ranks_%s.json' % args.epoch, 'w'))
+json.dump(test_ranks, open('results/multimode_check_test_ranks_%s.json' % args.epoch, 'w'))
+
+json.dump(validation_distance_metrics, open('results/multimode_check_validation_distance_metrics_%s.json' % args.epoch, 'w'))
+json.dump(test_distance_metrics, open('results/multimode_check_test_validation_distance_metrics_%s.json' % args.epoch, 'w'))
+
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
