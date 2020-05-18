@@ -1,7 +1,7 @@
 '''
 This is a supporting library with the code of the model.
 
-Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks. S. Kumar, X. Zhang, J. Leskovec. ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD), 2019. 
+Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks. S. Kumar, X. Zhang, J. Leskovec. ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD), 2019.
 '''
 
 from __future__ import division
@@ -32,6 +32,7 @@ except NameError:
 
 total_reinitialization_count = 0
 
+
 # A NORMALIZATION LAYER
 class NormalLinear(nn.Linear):
     def reset_parameters(self):
@@ -44,7 +45,7 @@ class NormalLinear(nn.Linear):
 # THE JODIE MODULE
 class JODIE(nn.Module):
     def __init__(self, args, num_features, num_users, num_items):
-        super(JODIE,self).__init__()
+        super(JODIE, self).__init__()
 
         print "*** Initializing the JODIE model ***"
         self.modelname = args.model
@@ -70,7 +71,7 @@ class JODIE(nn.Module):
         self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
-        
+
     def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None):
         if select == 'item_update':
             input1 = torch.cat([user_embeddings, timediffs, features], dim=1)
@@ -84,7 +85,7 @@ class JODIE(nn.Module):
 
         elif select == 'project':
             user_projected_embedding = self.context_convert(user_embeddings, timediffs, features)
-            #user_projected_embedding = torch.cat([input3, item_embeddings], dim=1)
+            # user_projected_embedding = torch.cat([input3, item_embeddings], dim=1)
             return user_projected_embedding
 
     def context_convert(self, embeddings, timediffs, features):
@@ -125,15 +126,15 @@ def reinitialize_tbatches():
     tbatchid_item = defaultdict(lambda: -1)
 
     global total_reinitialization_count
-    total_reinitialization_count +=1
+    total_reinitialization_count += 1
 
 
-# CALCULATE LOSS FOR THE PREDICTED USER STATE 
+# CALCULATE LOSS FOR THE PREDICTED USER STATE
 def calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_time_series, y_true, loss_function):
     # PREDCIT THE LABEL FROM THE USER DYNAMIC EMBEDDINGS
-    prob = model.predict_label(user_embeddings_time_series[tbatch_interactionids,:])
+    prob = model.predict_label(user_embeddings_time_series[tbatch_interactionids, :])
     y = Variable(torch.LongTensor(y_true).cuda()[tbatch_interactionids])
-    
+
     loss = loss_function(prob, y)
 
     return loss
@@ -143,13 +144,13 @@ def calculate_state_prediction_loss(model, tbatch_interactionids, user_embedding
 def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, train_end_idx, user_embeddings_time_series=None, item_embeddings_time_series=None, path=PATH):
     print "*** Saving embeddings and model ***"
     state = {
-            'user_embeddings': user_embeddings.data.cpu().numpy(),
-            'item_embeddings': item_embeddings.data.cpu().numpy(),
-            'epoch': epoch,
-            'state_dict': model.state_dict(),
-            'optimizer' : optimizer.state_dict(),
-            'train_end_idx': train_end_idx
-            }
+        'user_embeddings': user_embeddings.data.cpu().numpy(),
+        'item_embeddings': item_embeddings.data.cpu().numpy(),
+        'epoch': epoch,
+        'state_dict': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'train_end_idx': train_end_idx
+    }
 
     if user_embeddings_time_series is not None:
         state['user_embeddings_time_series'] = user_embeddings_time_series.data.cpu().numpy()
@@ -174,14 +175,14 @@ def load_model(model, optimizer, args, epoch):
     user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).cuda())
     item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).cuda())
     try:
-        train_end_idx = checkpoint['train_end_idx'] 
+        train_end_idx = checkpoint['train_end_idx']
     except KeyError:
         train_end_idx = None
 
     try:
         user_embeddings_time_series = Variable(torch.from_numpy(checkpoint['user_embeddings_time_series']).cuda())
         item_embeddings_time_series = Variable(torch.from_numpy(checkpoint['item_embeddings_time_series']).cuda())
-    except:
+    except Exception:
         user_embeddings_time_series = None
         item_embeddings_time_series = None
 
@@ -191,7 +192,7 @@ def load_model(model, optimizer, args, epoch):
     return [model, optimizer, user_embeddings, item_embeddings, user_embeddings_time_series, item_embeddings_time_series, train_end_idx]
 
 
-# SET USER AND ITEM EMBEDDINGS TO THE END OF THE TRAINING PERIOD 
+# SET USER AND ITEM EMBEDDINGS TO THE END OF THE TRAINING PERIOD
 def set_embeddings_training_end(user_embeddings, item_embeddings, user_embeddings_time_series, item_embeddings_time_series, user_data_id, item_data_id, train_end_idx):
     userid2lastidx = {}
     for cnt, userid in enumerate(user_data_id[:train_end_idx]):
@@ -202,7 +203,7 @@ def set_embeddings_training_end(user_embeddings, item_embeddings, user_embedding
 
     try:
         embedding_dim = user_embeddings_time_series.size(1)
-    except:
+    except Exception:
         embedding_dim = user_embeddings_time_series.shape[1]
     for userid in userid2lastidx:
         user_embeddings[userid, :embedding_dim] = user_embeddings_time_series[userid2lastidx[userid]]
@@ -213,12 +214,11 @@ def set_embeddings_training_end(user_embeddings, item_embeddings, user_embedding
     item_embeddings.detach_()
 
 
-# SELECT THE GPU WITH MOST FREE MEMORY TO SCHEDULE JOB 
+# SELECT THE GPU WITH MOST FREE MEMORY TO SCHEDULE JOB
 def select_free_gpu():
     mem = []
-    gpus = list(set(range(torch.cuda.device_count()))) # list(set(X)) is done to shuffle the array
+    gpus = list(set(range(torch.cuda.device_count())))  # list(set(X)) is done to shuffle the array
     for i in gpus:
         gpu_stats = gpustat.GPUStatCollection.new_query()
         mem.append(gpu_stats.jsonify()["gpus"][i]["memory.used"])
     return str(gpus[np.argmin(mem)])
-
