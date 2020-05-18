@@ -188,7 +188,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
                 'pi': pi_1.item(),
                 'true_euclidean_distances_1': euclidean_distances_1[itemid].item(),
                 'true_euclidean_distances_2': euclidean_distances_2[itemid].item(),
-                'true_item_distance': true_item_distance,
+                'true_item_distance': true_item_distance.item(),
                 'true_item_rank': true_item_rank
             })
         else:
@@ -197,7 +197,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
                 'pi': pi_1.item(),
                 'true_euclidean_distances_1': euclidean_distances_1[itemid].item(),
                 'true_euclidean_distances_2': euclidean_distances_2[itemid].item(),
-                'true_item_distance': true_item_distance,
+                'true_item_distance': true_item_distance.item(),
                 'true_item_rank': true_item_rank
             })
 
