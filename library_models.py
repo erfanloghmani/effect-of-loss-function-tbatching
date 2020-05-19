@@ -73,7 +73,7 @@ class JODIE(nn.Module):
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
 
-        self.histories = nn.Parameter(torch.zeros(num_users, self.history_len, self.embedding_dim))
+        self.histories = nn.Parameter(torch.zeros(num_users, self.history_len, self.embedding_dim), requires_grad=False)
         self.history_attn = nn.Linear(rnn_input_size_users + self.embedding_dim, self.history_len)
         self.history_attn_combine = nn.Linear(rnn_input_size_users + self.embedding_dim, rnn_input_size_users)
 
