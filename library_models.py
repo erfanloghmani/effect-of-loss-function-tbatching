@@ -44,12 +44,13 @@ class NormalLinear(nn.Linear):
 
 # THE JODIE MODULE
 class JODIE(nn.Module):
-    def __init__(self, args, num_features, num_users, num_items):
+    def __init__(self, args, num_features, num_users, num_items, history_len=10):
         super(JODIE, self).__init__()
 
         print "*** Initializing the JODIE model ***"
         self.modelname = args.model
         self.embedding_dim = args.embedding_dim
+        self.history_len = history_len
         self.num_users = num_users
         self.num_items = num_items
         self.user_static_embedding_size = num_users
@@ -72,14 +73,27 @@ class JODIE(nn.Module):
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
 
-    def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None):
+        self.histories = torch.zeros(num_users, self.history_len, self.embedding_dim)
+        self.history_attn = nn.Linear(rnn_input_size_users + self.embedding_dim, self.history_len)
+        self.history_attn_combine = nn.Linear(rnn_input_size_users + self.embedding_dim, rnn_input_size_users)
+
+    def forward(self, user_embeddings, item_embeddings, user_ids=[], timediffs=None, features=None, select=None):
         if select == 'item_update':
             input1 = torch.cat([user_embeddings, timediffs, features], dim=1)
             item_embedding_output = self.item_rnn(input1, item_embeddings)
-            return F.normalize(item_embedding_output)
+            item_embedding_output = F.normalize(item_embedding_output)
+            for i, user_id in enumerate(user_ids):
+                self.histories[user_id] = torch.cat([self.histories[user_id], item_embedding_output[i:i + 1].detach()])[1:]
+            return item_embedding_output
 
         elif select == 'user_update':
             input2 = torch.cat([item_embeddings, timediffs, features], dim=1)
+            input2_with_hidden = torch.cat([input2, user_embeddings], dim=1)
+            attn_weights = F.softmax(self.history_attn(input2_with_hidden), dim=1)
+            attn_applied = torch.bmm(attn_weights.unsqueeze(1),
+                                     self.histories[user_ids]).squeeze(1)
+            input2 = torch.cat((input2, attn_applied), 1)
+            input2 = self.history_attn_combine(input2)
             user_embedding_output = self.user_rnn(input2, user_embeddings)
             return F.normalize(user_embedding_output)
 
@@ -130,10 +144,10 @@ def reinitialize_tbatches():
 
 
 # CALCULATE LOSS FOR THE PREDICTED USER STATE
-def calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_time_series, y_true, loss_function):
+def calculate_state_prediction_loss(model, tbatch_interactionids, user_embeddings_time_series, y_true, loss_function, device):
     # PREDCIT THE LABEL FROM THE USER DYNAMIC EMBEDDINGS
     prob = model.predict_label(user_embeddings_time_series[tbatch_interactionids, :])
-    y = Variable(torch.LongTensor(y_true).cuda()[tbatch_interactionids])
+    y = Variable(torch.LongTensor(y_true).to(device)[tbatch_interactionids])
 
     loss = loss_function(prob, y)
 
