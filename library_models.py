@@ -174,7 +174,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    filename = os.path.join(directory, "checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
+    filename = os.path.join(directory, "attention-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
     torch.save(state, filename)
     print "*** Saved embeddings and model to file: %s ***\n\n" % filename
 
