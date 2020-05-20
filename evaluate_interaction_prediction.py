@@ -173,8 +173,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             test_ranks.append(true_item_rank)
 
         # UPDATE USER AND ITEM EMBEDDING
-        user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
-        item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
+        user_embedding_output = model.forward(user_embedding_input, item_embedding_input, user_ids=[userid],timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
+        item_embedding_output = model.forward(user_embedding_input, item_embedding_input, user_ids=[userid],timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
 
         # SAVE EMBEDDINGS
         item_embeddings[itemid, :] = item_embedding_output.squeeze(0)
