@@ -18,6 +18,7 @@ import json
 parser = argparse.ArgumentParser()
 parser.add_argument('--network', required=True, help='Network name')
 parser.add_argument('--model', default='jodie', help="Model name")
+parser.add_argument('--device', default='cuda', type=str, help='Which device to use')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epoch', default=50, type=int, help='Epoch id to load')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions')
@@ -32,10 +33,11 @@ if args.network == "mooc":
     sys.exit(0)
 
 # SET GPU
-if args.gpu == -1:
-    args.gpu = select_free_gpu()
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+if args.device == 'cuda':
+    if args.gpu == -1:
+        args.gpu = select_free_gpu()
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
 output_fname = "results/attention_interaction_prediction_%s.txt" % args.network
@@ -67,6 +69,8 @@ train_end_idx = validation_start_idx = int(num_interactions * args.train_proport
 test_start_idx = int(num_interactions * (args.train_proportion + 0.1))
 test_end_idx = int(num_interactions * (args.train_proportion + 0.2))
 
+device = torch.device(args.device)
+
 # SET BATCHING TIMESPAN
 '''
 Timespan indicates how frequently the model is run and updated.
@@ -78,8 +82,8 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
-weight = torch.Tensor([1, true_labels_ratio]).cuda()
+model = JODIE(args, num_features, num_users, num_items).to(device)
+weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 
@@ -144,9 +148,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         user_embedding_static_input = user_embeddings_static[torch.cuda.LongTensor([userid])]
         item_embedding_input = item_embeddings[torch.cuda.LongTensor([itemid])]
         item_embedding_static_input = item_embeddings_static[torch.cuda.LongTensor([itemid])]
-        feature_tensor = Variable(torch.Tensor(feature).cuda()).unsqueeze(0)
-        user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).cuda()).unsqueeze(0)
-        item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).cuda()).unsqueeze(0)
+        feature_tensor = Variable(torch.Tensor(feature).to(device)).unsqueeze(0)
+        user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).to(device)).unsqueeze(0)
+        item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).to(device)).unsqueeze(0)
         item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
 
         # PROJECT USER EMBEDDING
@@ -188,7 +192,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # CALCULATE STATE CHANGE LOSS
         if args.state_change:
-            loss += calculate_state_prediction_loss(model, [j], user_embeddings_timeseries, y_true, crossEntropyLoss)
+            loss += calculate_state_prediction_loss(model, [j], user_embeddings_timeseries, y_true, crossEntropyLoss, device)
 
         # UPDATE THE MODEL IN REAL-TIME USING ERRORS MADE IN THE PAST PREDICTION
         if timestamp - tbatch_start_time > tbatch_timespan:
