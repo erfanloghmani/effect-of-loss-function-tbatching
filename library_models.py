@@ -69,13 +69,13 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
+        self.prediction_layer = nn.Linear(self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
 
         self.histories = nn.Parameter(torch.zeros(num_users, self.history_len, self.embedding_dim), requires_grad=False)
-        self.history_attn = nn.Linear(rnn_input_size_users + self.embedding_dim, self.history_len)
-        self.history_attn_combine = nn.Linear(rnn_input_size_users + self.embedding_dim, rnn_input_size_users)
+        self.history_attn = nn.Linear(self.embedding_dim, self.history_len)
+        # self.history_attn_combine = nn.Linear(rnn_input_size_users + self.embedding_dim, rnn_input_size_users)
 
     def forward(self, user_embeddings, item_embeddings, user_ids=[], timediffs=None, features=None, select=None):
         if select == 'item_update':
@@ -83,17 +83,12 @@ class JODIE(nn.Module):
             item_embedding_output = self.item_rnn(input1, item_embeddings)
             item_embedding_output = F.normalize(item_embedding_output)
             for i, user_id in enumerate(user_ids):
+                # TODO: check whether its better to join static embeddings too
                 self.histories[user_id] = torch.cat([self.histories[user_id], item_embedding_output[i:i + 1].detach()])[1:]
             return item_embedding_output
 
         elif select == 'user_update':
             input2 = torch.cat([item_embeddings, timediffs, features], dim=1)
-            input2_with_hidden = torch.cat([input2, user_embeddings], dim=1)
-            attn_weights = F.softmax(self.history_attn(input2_with_hidden), dim=1)
-            attn_applied = torch.bmm(attn_weights.unsqueeze(1),
-                                     self.histories[user_ids]).squeeze(1)
-            input2 = torch.cat((input2, attn_applied), 1)
-            input2 = self.history_attn_combine(input2)
             user_embedding_output = self.user_rnn(input2, user_embeddings)
             return F.normalize(user_embedding_output)
 
@@ -111,8 +106,14 @@ class JODIE(nn.Module):
         X_out = self.linear_layer2(X_out)
         return X_out
 
-    def predict_item_embedding(self, user_embeddings):
-        X_out = self.prediction_layer(user_embeddings)
+    def predict_item_embedding(self, user_embeddings, user_ids):
+        attn_weights = F.softmax(self.history_attn(user_embeddings), dim=1)
+        attn_applied = torch.bmm(attn_weights.unsqueeze(1),
+                                 self.histories[user_ids]).squeeze(1)
+        embeddings_joined = torch.cat((user_embeddings, attn_applied), 1)
+        # TODO: Maybe it is better to combine
+        # embeddings_joined = self.history_attn_combine(embeddings_joined)
+        X_out = self.prediction_layer(embeddings_joined)
         return X_out
 
 
@@ -174,7 +175,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    filename = os.path.join(directory, "attention-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
+    filename = os.path.join(directory, "attention-prediction-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
     torch.save(state, filename)
     print "*** Saved embeddings and model to file: %s ***\n\n" % filename
 
@@ -182,7 +183,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
 def load_model(model, optimizer, args, epoch):
     modelname = args.model
-    filename = PATH + "saved_models/%s/attention-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
+    filename = PATH + "saved_models/%s/attention-prediction-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
     print "Loading saved embeddings and model: %s" % filename
     args.start_epoch = checkpoint['epoch']

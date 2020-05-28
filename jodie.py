@@ -177,10 +177,10 @@ with trange(args.epochs) as progress_bar1:
                             # PROJECT USER EMBEDDING TO CURRENT TIME
                             user_embedding_input = user_embeddings[tbatch_userids, :]
                             user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-                            user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
+                            # user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
-                            predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
+                            predicted_item_embedding = model.predict_item_embedding(user_projected_embedding, tbatch_userids)
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]

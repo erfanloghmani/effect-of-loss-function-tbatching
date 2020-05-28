@@ -40,7 +40,7 @@ if args.device == 'cuda':
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/attention_interaction_prediction_%s.txt" % args.network
+output_fname = "results/attention_prediction_interaction_prediction_%s.txt" % args.network
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
@@ -155,10 +155,10 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # PROJECT USER EMBEDDING
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-        user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
+        # user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
 
         # PREDICT ITEM EMBEDDING
-        predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
+        predicted_item_embedding = model.predict_item_embedding(user_projected_embedding, [userid])
 
         # CALCULATE PREDICTION LOSS
         loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
@@ -209,8 +209,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/attention_validation_ranks_%s.json' % args.epoch, 'w'))
-json.dump(test_ranks, open('results/attention_test_ranks_%s.json' % args.epoch, 'w'))
+json.dump(validation_ranks, open('results/attention_prediction_validation_ranks_%s.json' % args.epoch, 'w'))
+json.dump(test_ranks, open('results/attention_prediction_test_ranks_%s.json' % args.epoch, 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
