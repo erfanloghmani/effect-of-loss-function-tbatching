@@ -8,6 +8,7 @@ $ python jodie.py --network reddit --model jodie --epochs 50
 Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks. S. Kumar, X. Zhang, J. Leskovec. ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD), 2019.
 '''
 
+import json
 from library_data import *
 import library_models as lib
 from library_models import *
@@ -86,6 +87,8 @@ user_embedding_static = Variable(torch.eye(num_users).to(device))  # one-hot vec
 # INITIALIZE MODEL
 learning_rate = 1e-3
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+
+all_total_losses = []
 
 if (args.init_epoch >= 0):
     model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch, device)
@@ -235,10 +238,14 @@ with trange(args.epochs) as progress_bar1:
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
+        all_total_losses.append(total_loss)
+        json.dump(all_total_losses, open('multimode_%s_training_total_losses.json' % args.network, 'w'))
 
         user_embeddings = initial_user_embedding.repeat(num_users, 1)
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
 
+
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
 print "\n\n*** Training complete. Saving final model. ***\n\n"
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
+json.dump(all_total_losses, open('multimode_%s_training_total_losses.json' % args.network, 'w'))
