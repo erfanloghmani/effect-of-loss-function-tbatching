@@ -8,6 +8,7 @@ $ python jodie.py --network reddit --model jodie --epochs 50
 Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks. S. Kumar, X. Zhang, J. Leskovec. ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD), 2019.
 '''
 
+import json
 from library_data import *
 import library_models as lib
 from library_models import *
