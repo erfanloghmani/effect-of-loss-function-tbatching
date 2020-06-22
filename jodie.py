@@ -23,7 +23,7 @@ parser.add_argument('--device', default='cuda', type=str, help='Which device to 
 parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions of the dynamic embedding')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Fraction of interactions (from the beginning) that are used for training.The next 10% are used for validation and the next 10% for testing')
-parser.add_argument('--history_len', default=10, type=int, help='Number of items to attend in history.')
+parser.add_argument('--history_len', default=20, type=int, help='Number of items to attend in history.')
 parser.add_argument('--state_change', default=True, type=bool, help='True if training with state change of users along with interaction prediction. False otherwise. By default, set to True.')
 args = parser.parse_args()
 
@@ -187,8 +187,8 @@ with trange(args.epochs) as progress_bar1:
                             loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
-                            user_embedding_output = model.forward(user_embedding_input, item_embedding_input, user_ids=tbatch_userids, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
-                            item_embedding_output = model.forward(user_embedding_input, item_embedding_input, user_ids=tbatch_userids, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
+                            user_embedding_output = model.forward(user_embedding_input, item_embedding_input, item_static_embeddings=item_embedding_static[tbatch_itemids, :], user_ids=tbatch_userids, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
+                            item_embedding_output = model.forward(user_embedding_input, item_embedding_input, item_static_embeddings=item_embedding_static[tbatch_itemids, :], user_ids=tbatch_userids, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
 
                             item_embeddings[tbatch_itemids, :] = item_embedding_output
                             user_embeddings[tbatch_userids, :] = user_embedding_output

@@ -44,7 +44,7 @@ class NormalLinear(nn.Linear):
 
 # THE JODIE MODULE
 class JODIE(nn.Module):
-    def __init__(self, args, num_features, num_users, num_items, history_len=10):
+    def __init__(self, args, num_features, num_users, num_items, history_len=20):
         super(JODIE, self).__init__()
 
         print "*** Initializing the JODIE model ***"
@@ -69,22 +69,23 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
+        self.prediction_layer = nn.Linear(self.embedding_dim * 2 + self.item_static_embedding_size, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
 
-        self.histories = nn.Parameter(torch.zeros(num_users, self.history_len, self.embedding_dim), requires_grad=False)
+        self.histories = nn.Parameter(torch.zeros(num_users, self.history_len, self.embedding_dim + self.item_static_embedding_size), requires_grad=False)
         self.history_attn = nn.Linear(self.embedding_dim, self.history_len)
         # self.history_attn_combine = nn.Linear(rnn_input_size_users + self.embedding_dim, rnn_input_size_users)
 
-    def forward(self, user_embeddings, item_embeddings, user_ids=[], timediffs=None, features=None, select=None):
+    def forward(self, user_embeddings, item_embeddings, item_static_embeddings=None, user_ids=[], timediffs=None, features=None, select=None):
         if select == 'item_update':
             input1 = torch.cat([user_embeddings, timediffs, features], dim=1)
             item_embedding_output = self.item_rnn(input1, item_embeddings)
             item_embedding_output = F.normalize(item_embedding_output)
             for i, user_id in enumerate(user_ids):
                 # TODO: check whether its better to join static embeddings too
-                self.histories[user_id] = torch.cat([self.histories[user_id], item_embedding_output[i:i + 1].detach()])[1:]
+                cur_embedding = torch.cat([item_embedding_output[i:i + 1].detach(), item_static_embeddings[i:i + 1].detach()], dim=1)
+                self.histories[user_id] = torch.cat([self.histories[user_id], cur_embedding])[1:]
             return item_embedding_output
 
         elif select == 'user_update':
