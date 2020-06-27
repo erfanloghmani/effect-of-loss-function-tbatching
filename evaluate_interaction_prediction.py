@@ -148,14 +148,14 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         itemid_previous = user_previous_itemid_sequence[j]
 
         # LOAD USER AND ITEM EMBEDDING
-        user_embedding_input = user_embeddings[torch.cuda.LongTensor([userid])]
-        user_embedding_static_input = user_embeddings_static[torch.cuda.LongTensor([userid])]
-        item_embedding_input = item_embeddings[torch.cuda.LongTensor([itemid])]
-        item_embedding_static_input = item_embeddings_static[torch.cuda.LongTensor([itemid])]
+        user_embedding_input = user_embeddings[torch.LongTensor([userid], device=device)]
+        user_embedding_static_input = user_embeddings_static[torch.LongTensor([userid], device=device)]
+        item_embedding_input = item_embeddings[torch.LongTensor([itemid], device=device)]
+        item_embedding_static_input = item_embeddings_static[torch.LongTensor([itemid], device=device)]
         feature_tensor = Variable(torch.Tensor(feature).to(device)).unsqueeze(0)
         user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).to(device)).unsqueeze(0)
         item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).to(device)).unsqueeze(0)
-        item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
+        item_embedding_previous = item_embeddings[torch.LongTensor([itemid_previous], device=device)]
 
         # PROJECT USER EMBEDDING
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')

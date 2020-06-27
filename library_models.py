@@ -185,7 +185,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 def load_model(model, optimizer, args, epoch, device):
     modelname = args.model
     filename = PATH + "saved_models/%s/attention-prediction-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
-    checkpoint = torch.load(filename)
+    checkpoint = torch.load(filename, map_location=device)
     print "Loading saved embeddings and model: %s" % filename
     args.start_epoch = checkpoint['epoch']
     user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).to(device))
