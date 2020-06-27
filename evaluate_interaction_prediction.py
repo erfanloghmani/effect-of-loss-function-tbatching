@@ -163,7 +163,6 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # PREDICT ITEM EMBEDDING
         predicted_item_embedding, attn_weights = model.predict_item_embedding(user_projected_embedding, [userid])
-        print(attn_weights.shape)
 
         # CALCULATE PREDICTION LOSS
         loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
@@ -181,7 +180,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             validation_attentions[j - validation_start_idx, :] = attn_weights.numpy()
         else:
             test_ranks.append(true_item_rank)
-            test_attentions[j - validation_start_idx, :] = attn_weights.numpy()
+            test_attentions[j - test_start_idx, :] = attn_weights.numpy()
 
         # UPDATE USER AND ITEM EMBEDDING
         user_embedding_output = model.forward(user_embedding_input, item_embedding_input, item_static_embeddings=item_embedding_static_input, user_ids=[userid], timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
@@ -215,9 +214,16 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             item_embeddings_timeseries.detach_()
             user_embeddings_timeseries.detach_()
 
+            np.save('results/attention_prediction_validation_attentions_%s_%s.npy' % (args.network, args.epoch), validation_attentions)
+            np.save('results/attention_prediction_test_attentions_%s_%s.npy' % (args.network, args.epoch), test_attentions)
+            json.dump(validation_ranks, open('results/attention_prediction_validation_ranks_%s_%s.json' % (args.network, args.epoch), 'w'))
+            json.dump(test_ranks, open('results/attention_prediction_test_ranks_%s_%s.json' % (args.network, args.epoch), 'w'))
 
-json.dump(validation_ranks, open('results/attention_prediction_validation_ranks_%s.json' % args.epoch, 'w'))
-json.dump(test_ranks, open('results/attention_prediction_test_ranks_%s.json' % args.epoch, 'w'))
+np.save('results/attention_prediction_validation_attentions_%s_%s.npy' % (args.network, args.epoch), validation_attentions)
+np.save('results/attention_prediction_test_attentions_%s_%s.npy' % (args.network, args.epoch), test_attentions)
+json.dump(validation_ranks, open('results/attention_prediction_validation_ranks_%s_%s.json' % (args.network, args.epoch), 'w'))
+json.dump(test_ranks, open('results/attention_prediction_test_ranks_%s_%s.json' % (args.network, args.epoch), 'w'))
+
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
