@@ -182,22 +182,22 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 
 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
-def load_model(model, optimizer, args, epoch):
+def load_model(model, optimizer, args, epoch, device):
     modelname = args.model
     filename = PATH + "saved_models/%s/attention-prediction-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
     print "Loading saved embeddings and model: %s" % filename
     args.start_epoch = checkpoint['epoch']
-    user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).cuda())
-    item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).cuda())
+    user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).to(device))
+    item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).to(device))
     try:
         train_end_idx = checkpoint['train_end_idx']
     except KeyError:
         train_end_idx = None
 
     try:
-        user_embeddings_time_series = Variable(torch.from_numpy(checkpoint['user_embeddings_time_series']).cuda())
-        item_embeddings_time_series = Variable(torch.from_numpy(checkpoint['item_embeddings_time_series']).cuda())
+        user_embeddings_time_series = Variable(torch.from_numpy(checkpoint['user_embeddings_time_series']).to(device))
+        item_embeddings_time_series = Variable(torch.from_numpy(checkpoint['item_embeddings_time_series']).to(device))
     except Exception:
         user_embeddings_time_series = None
         item_embeddings_time_series = None
