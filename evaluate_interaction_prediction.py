@@ -23,6 +23,7 @@ parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on
 parser.add_argument('--epoch', default=50, type=int, help='Epoch id to load')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Proportion of training interactions')
+parser.add_argument('--history_len', default=20, type=int, help='Number of items to attend in history.')
 parser.add_argument('--state_change', default=True, type=bool, help='True if training with state change of users in addition to the next interaction prediction. False otherwise. By default, set to True. MUST BE THE SAME AS THE ONE USED IN TRAINING.')
 args = parser.parse_args()
 args.datapath = "data/%s.csv" % args.network
@@ -114,6 +115,9 @@ user_embeddings_static = user_embeddings_static.clone()
 validation_ranks = []
 test_ranks = []
 
+validation_attentions = np.zeros((test_start_idx - validation_start_idx, args.history_len))
+test_attentions = np.zeros((test_end_idx - test_start_idx, args.history_len))
+
 '''
 Here we use the trained model to make predictions for the validation and testing interactions.
 The model does a forward pass from the start of validation till the end of testing.
@@ -158,7 +162,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
 
         # PREDICT ITEM EMBEDDING
-        predicted_item_embedding = model.predict_item_embedding(user_projected_embedding, [userid])
+        predicted_item_embedding, attn_weights = model.predict_item_embedding(user_projected_embedding, [userid])
+        print(attn_weights.shape)
 
         # CALCULATE PREDICTION LOSS
         loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
@@ -173,8 +178,10 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
+            validation_attentions[j - validation_start_idx, :] = attn_weights.numpy()
         else:
             test_ranks.append(true_item_rank)
+            test_attentions[j - validation_start_idx, :] = attn_weights.numpy()
 
         # UPDATE USER AND ITEM EMBEDDING
         user_embedding_output = model.forward(user_embedding_input, item_embedding_input, item_static_embeddings=item_embedding_static_input, user_ids=[userid], timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')

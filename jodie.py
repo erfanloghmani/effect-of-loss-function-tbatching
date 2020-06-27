@@ -180,7 +180,7 @@ with trange(args.epochs) as progress_bar1:
                             # user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
-                            predicted_item_embedding = model.predict_item_embedding(user_projected_embedding, tbatch_userids)
+                            predicted_item_embedding, attn_weights = model.predict_item_embedding(user_projected_embedding, tbatch_userids)
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]

@@ -115,7 +115,7 @@ class JODIE(nn.Module):
         # TODO: Maybe it is better to combine
         # embeddings_joined = self.history_attn_combine(embeddings_joined)
         X_out = self.prediction_layer(embeddings_joined)
-        return X_out
+        return X_out, attn_weights.detach()
 
 
 # INITIALIZE T-BATCH VARIABLES
