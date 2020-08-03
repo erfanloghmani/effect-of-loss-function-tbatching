@@ -67,7 +67,8 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL AND PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).to(device)
+num_distributions = 4
+model = JODIE(args, num_features, num_users, num_items, num_distributions).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
@@ -185,17 +186,19 @@ with trange(args.epochs) as progress_bar1:
                             user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
-                            prediction_result = model.predict_item_embedding(user_item_embedding)
+                            prediction_pis, prediction_mus = model.predict_item_distribution(user_item_embedding)
                             prediction_size = args.embedding_dim + num_items
-                            predicted_item_embedding_1 = prediction_result[:, :prediction_size]
-                            predicted_item_embedding_2 = prediction_result[:, prediction_size:2*prediction_size]
-                            pi_1 = torch.sigmoid(prediction_result[:, 2*prediction_size])
 
-                            # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
-                            loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()).sum(1)
-                            loss += loss_1.dot(pi_1) + loss_2.dot(1 - pi_1)
+                            expected_output = torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach()
+
+                            prediction_mus = prediction_mus.view(-1, prediction_size, num_distributions)
+                            m = torch.distributions.Normal(loc=prediction_mus, scale=1)
+                            expected_output_repeat = expected_output.unsqueeze(2).repeat(1, 1, num_distributions)
+                            lp = m.log_prob(expected_output_repeat)
+                            prob = torch.exp(torch.sum(lp, dim=1))
+                            prob_all = torch.sum(prob * prediction_pis, dim=1)
+                            loss += torch.mean(-torch.log(prob_all))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
