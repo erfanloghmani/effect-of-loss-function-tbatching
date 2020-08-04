@@ -113,6 +113,8 @@ logfile = open('log.txt', 'w')
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
 
+kappa = 10
+
 print "*** Training the JODIE model for %d epochs ***" % args.epochs
 with trange(args.epochs) as progress_bar1:
     for ep in progress_bar1:
@@ -196,9 +198,9 @@ with trange(args.epochs) as progress_bar1:
                             m = torch.distributions.Normal(loc=prediction_mus, scale=1)
                             expected_output_repeat = expected_output.unsqueeze(2).repeat(1, 1, num_distributions)
                             lp = m.log_prob(expected_output_repeat)
-                            prob = torch.exp(torch.sum(lp, dim=1))
+                            prob = torch.exp(torch.mean(lp, dim=1))
                             prob_all = torch.sum(prob * prediction_pis, dim=1)
-                            loss += torch.mean(-torch.log(prob_all))
+                            loss += kappa * torch.mean(-torch.log(prob_all))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
