@@ -67,7 +67,7 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, 2 * (self.item_static_embedding_size + self.embedding_dim) + 1)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, 2 * (self.item_static_embedding_size + self.embedding_dim))
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
         
@@ -159,7 +159,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    filename = os.path.join(directory, "multimode-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
+    filename = os.path.join(directory, "min-multimode-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
     torch.save(state, filename)
     print "*** Saved embeddings and model to file: %s ***\n\n" % filename
 
@@ -167,7 +167,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
 def load_model(model, optimizer, args, epoch, device):
     modelname = args.model
-    filename = PATH + "saved_models/%s/multimode-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
+    filename = PATH + "saved_models/%s/min-multimode-checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
     print "Loading saved embeddings and model: %s" % filename
     args.start_epoch = checkpoint['epoch']
