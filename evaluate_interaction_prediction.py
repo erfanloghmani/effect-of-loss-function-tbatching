@@ -171,7 +171,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
         loss += torch.mean(torch.min(loss_1, loss_2))
 
-        min_euclidean_distances = torch.min(loss_1, loss_2)
+        euclidean_distances_1 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_1.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
+        euclidean_distances_2 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_2.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
+        min_euclidean_distances = torch.min(euclidean_distances_1, euclidean_distances_2)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         true_item_distance = min_euclidean_distances[itemid]
@@ -183,8 +185,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
             validation_distance_metrics.append({
-                'loss_1': loss_1[itemid].item(),
-                'loss_2': loss_2[itemid].item(),
+                'euclidean_distances_1': euclidean_distances_1[itemid].item(),
+                'euclidean_distances_2': euclidean_distances_2[itemid].item(),
                 'pred_distance': pred_distance.item(),
                 'true_item_distance': true_item_distance.item(),
                 'true_item_rank': true_item_rank
@@ -192,8 +194,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         else:
             test_ranks.append(true_item_rank)
             test_distance_metrics.append({
-                'loss_1': loss_1[itemid].item(),
-                'loss_2': loss_2[itemid].item(),
+                'euclidean_distances_1': euclidean_distances_1[itemid].item(),
+                'euclidean_distances_2': euclidean_distances_2[itemid].item(),
                 'pred_distance': pred_distance.item(),
                 'true_item_distance': true_item_distance.item(),
                 'true_item_rank': true_item_rank
