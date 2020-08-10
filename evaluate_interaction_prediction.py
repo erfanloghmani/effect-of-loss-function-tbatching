@@ -165,38 +165,36 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         prediction_size = args.embedding_dim + num_items
         predicted_item_embedding_1 = prediction_result[:, :prediction_size]
         predicted_item_embedding_2 = prediction_result[:, prediction_size:2 * prediction_size]
-        pi_1 = torch.sigmoid(prediction_result[:, 2 * prediction_size])
 
         # CALCULATE PREDICTION LOSS
         loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
         loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
-        loss += loss_1.dot(pi_1) + loss_2.dot(1 - pi_1)
+        loss += torch.mean(torch.min(loss_1, loss_2))
 
-        # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        euclidean_distances_1 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_1.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
-        euclidean_distances_2 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_2.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
-        sum_euclidean_distances = pi_1 * euclidean_distances_1 + (1 - pi_1) * euclidean_distances_2
+        min_euclidean_distances = torch.min(loss_1, loss_2)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-        true_item_distance = sum_euclidean_distances[itemid]
-        euclidean_distances_smaller = (sum_euclidean_distances < true_item_distance).data.cpu().numpy()
+        true_item_distance = min_euclidean_distances[itemid]
+        euclidean_distances_smaller = (min_euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
+
+        pred_distance = torch.norm(predicted_item_embedding_2 - predicted_item_embedding_1)
 
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
             validation_distance_metrics.append({
-                'pi': pi_1.item(),
-                'true_euclidean_distances_1': euclidean_distances_1[itemid].item(),
-                'true_euclidean_distances_2': euclidean_distances_2[itemid].item(),
+                'loss_1': loss_1[itemid].item(),
+                'loss_2': loss_2[itemid].item(),
+                'pred_distance': pred_distance.item(),
                 'true_item_distance': true_item_distance.item(),
                 'true_item_rank': true_item_rank
             })
         else:
             test_ranks.append(true_item_rank)
             test_distance_metrics.append({
-                'pi': pi_1.item(),
-                'true_euclidean_distances_1': euclidean_distances_1[itemid].item(),
-                'true_euclidean_distances_2': euclidean_distances_2[itemid].item(),
+                'loss_1': loss_1[itemid].item(),
+                'loss_2': loss_2[itemid].item(),
+                'pred_distance': pred_distance.item(),
                 'true_item_distance': true_item_distance.item(),
                 'true_item_rank': true_item_rank
             })
