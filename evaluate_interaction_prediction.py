@@ -40,7 +40,7 @@ if args.device == 'cuda':
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/multimode_check_interaction_prediction_%s.txt" % args.network
+output_fname = "results/weighted_min_interaction_prediction_%s.txt" % args.network
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
@@ -165,19 +165,20 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         prediction_size = args.embedding_dim + num_items
         predicted_item_embedding_1 = prediction_result[:, :prediction_size]
         predicted_item_embedding_2 = prediction_result[:, prediction_size:2 * prediction_size]
+        w = torch.sigmoid(prediction_result[:, 2 * prediction_size]) * 2
 
         # CALCULATE PREDICTION LOSS
         loss_1 = MSELossNoReduce(predicted_item_embedding_1, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
         loss_2 = MSELossNoReduce(predicted_item_embedding_2, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach()).sum(1)
-        loss += torch.mean(torch.min(loss_1, loss_2))
+        loss += torch.mean(torch.min(loss_1, w * loss_2))
 
         euclidean_distances_1 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_1.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
         euclidean_distances_2 = torch.pow(nn.PairwiseDistance()(predicted_item_embedding_2.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1), 2)
-        min_euclidean_distances = torch.min(euclidean_distances_1, euclidean_distances_2)
+        weighted_min_euclidean_distances = torch.min(euclidean_distances_1, w * euclidean_distances_2)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-        true_item_distance = min_euclidean_distances[itemid]
-        euclidean_distances_smaller = (min_euclidean_distances < true_item_distance).data.cpu().numpy()
+        true_item_distance = weighted_min_euclidean_distances[itemid]
+        euclidean_distances_smaller = (weighted_min_euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
         pred_distance = torch.norm(predicted_item_embedding_2 - predicted_item_embedding_1)
@@ -185,6 +186,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
             validation_distance_metrics.append({
+                'w': w[0].item(),
                 'euclidean_distances_1': euclidean_distances_1[itemid].item(),
                 'euclidean_distances_2': euclidean_distances_2[itemid].item(),
                 'pred_distance': pred_distance.item(),
@@ -194,6 +196,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         else:
             test_ranks.append(true_item_rank)
             test_distance_metrics.append({
+                'w': w[0].item(),
                 'euclidean_distances_1': euclidean_distances_1[itemid].item(),
                 'euclidean_distances_2': euclidean_distances_2[itemid].item(),
                 'pred_distance': pred_distance.item(),
@@ -234,11 +237,11 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/multimode_check_validation_ranks_%s.json' % args.epoch, 'w'))
-json.dump(test_ranks, open('results/multimode_check_test_ranks_%s.json' % args.epoch, 'w'))
+json.dump(validation_ranks, open('results/weighted_min_validation_ranks_%s.json' % args.epoch, 'w'))
+json.dump(test_ranks, open('results/weighted_min_test_ranks_%s.json' % args.epoch, 'w'))
 
-json.dump(validation_distance_metrics, open('results/multimode_check_validation_distance_metrics_%s.json' % args.epoch, 'w'))
-json.dump(test_distance_metrics, open('results/multimode_check_test_validation_distance_metrics_%s.json' % args.epoch, 'w'))
+json.dump(validation_distance_metrics, open('results/weighted_min_validation_distance_metrics_%s.json' % args.epoch, 'w'))
+json.dump(test_distance_metrics, open('results/weighted_min_test_validation_distance_metrics_%s.json' % args.epoch, 'w'))
 
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
