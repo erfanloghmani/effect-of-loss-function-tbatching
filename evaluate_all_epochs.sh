@@ -21,7 +21,7 @@ while [ $idx -le 49 ]
 do
     echo $idx
     if [ $type == "$interaction" ]; then
-	python2.7 evaluate_interaction_prediction.py --network $network --model jodie --epoch ${idx} --gpu ${gpu}
+	python2.7 evaluate_interaction_prediction.py --network $network --model jodie --epoch ${idx} --gpu ${gpu} --state_change False
     else
 	python2.7 evaluate_state_change_prediction.py --network $network --model jodie --epoch ${idx} --gpu ${gpu}
     fi

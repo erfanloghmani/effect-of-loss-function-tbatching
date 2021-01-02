@@ -28,8 +28,10 @@ while True:
     for key, value in gpu_used.items():
         if value < 6000:
             found = True
-            with open('stdout-%s.txt' % counter, 'w') as f:
-                process = subprocess.Popen(['/home/eloghmani/myjodie/evaluate_all_epochs.sh', 'lastfm', 'interaction', key],
+            with open('nstdout-%s.txt' % counter, 'w') as f:
+                process = subprocess.Popen(#['python', '/home/eloghmani/myjodie/jodie.py', '--network', 'lastfm',
+                                           # '--model', 'jodie', '--epochs', '50', '--gpu', key, '--state_change', 'False'],
+                                            ['/home/eloghmani/myjodie/evaluate_all_epochs.sh', 'lastfm', 'interaction', key], 
                                            stdout=f,
                                            stderr=f)
             break
