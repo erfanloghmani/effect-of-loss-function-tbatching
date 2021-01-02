@@ -83,8 +83,8 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
-weight = torch.Tensor([1, true_labels_ratio]).cuda()
+model = JODIE(args, num_features, num_users, num_items).to(device)
+weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 
@@ -149,9 +149,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         user_embedding_static_input = user_embeddings_static[torch.cuda.LongTensor([userid])]
         item_embedding_input = item_embeddings[torch.cuda.LongTensor([itemid])]
         item_embedding_static_input = item_embeddings_static[torch.cuda.LongTensor([itemid])]
-        feature_tensor = Variable(torch.Tensor(feature).cuda()).unsqueeze(0)
-        user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).cuda()).unsqueeze(0)
-        item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).cuda()).unsqueeze(0)
+        feature_tensor = Variable(torch.Tensor(feature).to(device)).unsqueeze(0)
+        user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).to(device)).unsqueeze(0)
+        item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).to(device)).unsqueeze(0)
         item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
 
         # PROJECT USER EMBEDDING
