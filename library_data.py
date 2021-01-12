@@ -90,6 +90,10 @@ def load_network(args, time_scaling=True):
         user_current_timestamp[user] = timestamp
         user_previous_itemid_sequence.append(user_latest_itemid[user])
         user_latest_itemid[user] = item2id[item_sequence[cnt]]
+
+    user2id['DUMMY'] = nodeid
+    nodeid += 1
+
     num_users = len(user2id)
     user_sequence_id = [user2id[user] for user in user_sequence]
 
