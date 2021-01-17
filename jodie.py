@@ -38,7 +38,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, item_statics] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
@@ -63,7 +63,7 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL AND PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_statics.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
@@ -76,7 +76,8 @@ model.initial_item_embedding = initial_item_embedding
 
 user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all users to the same embedding
 item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all items to the same embedding
-item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
+# item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
+item_embeddings_static = Variable(torch.tensor(item_statics).cuda())
 user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
 
 # INITIALIZE MODEL
