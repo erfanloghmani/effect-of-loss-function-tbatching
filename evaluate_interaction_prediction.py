@@ -54,7 +54,7 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true] = load_network(args)
+ y_true, item_statics] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
@@ -78,7 +78,7 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_statics.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
