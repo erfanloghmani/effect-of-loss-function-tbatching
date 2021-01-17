@@ -31,7 +31,7 @@ def load_network(args, time_scaling=True):
 
     network = args.network
     datapath = args.datapath
-    embspath = "data/%s_items.npz" % args.network
+    embspath = "data/%s_items.npy" % args.network
 
     item_statics = np.load(embspath)
 
