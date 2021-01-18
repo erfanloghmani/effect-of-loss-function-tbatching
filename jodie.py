@@ -40,7 +40,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence, feature_sequence, y_true, item_statics] = load_network(args)
 num_interactions = len(user_sequence_id)
-num_users = len(user2id)
+num_users = len(user2id) + 1
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
 num_features = len(feature_sequence[0])
 true_labels_ratio = len(y_true) / (1.0 + sum(y_true))  # +1 in denominator in case there are no state change labels, which will throw an error.
@@ -77,7 +77,7 @@ model.initial_item_embedding = initial_item_embedding
 user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all users to the same embedding
 item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all items to the same embedding
 # item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
-item_embeddings_static = Variable(torch.tensor(item_statics).cuda())
+item_embedding_static = Variable(torch.tensor(item_statics, dtype=torch.float).cuda())
 user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
 
 # INITIALIZE MODEL
