@@ -103,8 +103,8 @@ item_embeddings_static = item_embeddings_static.clone()
 
 user_embeddings = user_embeddings_dystat[:, :args.embedding_dim]
 user_embeddings = user_embeddings.clone()
-user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
-user_embeddings_static = user_embeddings_static.clone()
+# user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
+# user_embeddings_static = user_embeddings_static.clone()
 
 # PERFORMANCE METRICS
 validation_ranks = []
@@ -141,7 +141,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # LOAD USER AND ITEM EMBEDDING
         user_embedding_input = user_embeddings[torch.cuda.LongTensor([userid])]
-        user_embedding_static_input = user_embeddings_static[torch.cuda.LongTensor([userid])]
+        # user_embedding_static_input = user_embeddings_static[torch.cuda.LongTensor([userid])]
         item_embedding_input = item_embeddings[torch.cuda.LongTensor([itemid])]
         item_embedding_static_input = item_embeddings_static[torch.cuda.LongTensor([itemid])]
         feature_tensor = Variable(torch.Tensor(feature).cuda()).unsqueeze(0)
@@ -151,7 +151,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # PROJECT USER EMBEDDING
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-        user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
+        user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])]], dim=1)
 
         # PREDICT ITEM EMBEDDING
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
