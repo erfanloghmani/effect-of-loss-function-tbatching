@@ -78,7 +78,7 @@ user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all 
 item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all items to the same embedding
 # item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
 item_embeddings_static = Variable(torch.tensor(item_statics).cuda())
-user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
+# user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
@@ -99,8 +99,8 @@ if (args.init_epoch >= 0):
 
     user_embeddings = user_embeddings_dystat[:, :args.embedding_dim]
     user_embeddings = user_embeddings.clone()
-    user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
-    user_embeddings_static = user_embeddings_static.clone()
+    # user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
+    # user_embeddings_static = user_embeddings_static.clone()
 
 # RUN THE JODIE MODEL
 '''
@@ -109,6 +109,8 @@ THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING
 print "*** Training the JODIE model for %d epochs ***" % args.epochs
 with trange(args.epochs) as progress_bar1:
     for ep in progress_bar1:
+        user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all users to the same embedding
+
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
 
         # INITIALIZE EMBEDDING TRAJECTORY STORAGE
@@ -176,7 +178,7 @@ with trange(args.epochs) as progress_bar1:
                             # PROJECT USER EMBEDDING TO CURRENT TIME
                             user_embedding_input = user_embeddings[tbatch_userids, :]
                             user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-                            user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
+                            user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
                             predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
