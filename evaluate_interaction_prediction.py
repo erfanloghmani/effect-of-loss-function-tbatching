@@ -197,7 +197,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
                         euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding[en:en + 1].repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
 
                         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-                        true_item_distance = euclidean_distances[tbatch_itemids[en], tbatch_itemids[en] + 1]
+                        true_item_distance = euclidean_distances[tbatch_itemids[en]:tbatch_itemids[en] + 1]
                         euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
                         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
