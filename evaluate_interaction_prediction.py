@@ -11,6 +11,7 @@ Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks.
 '''
 
 from library_data import *
+import library_models as lib
 from library_models import *
 import json
 
@@ -121,8 +122,6 @@ This simulates the real-time feedback about the predictions that the model gets 
 Please note that since each interaction in validation and test is only seen once during the forward pass, there is no data leakage.
 '''
 
-user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all users to the same embedding
-
 # INITIALIZE EMBEDDING TRAJECTORY STORAGE
 user_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).cuda())
 item_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).cuda())
@@ -188,31 +187,28 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
                     # PROJECT USER EMBEDDING TO CURRENT TIME
                     user_embedding_input = user_embeddings[tbatch_userids, :]
                     user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-                    user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :]], dim=1)
+                    user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[tbatch_itemids_previous, :]], dim=1)
 
                     # PREDICT NEXT ITEM EMBEDDING
                     predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
-                    size = predicted_item_embedding.shape[0]
-
-                    # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-                    euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat_interleave(repeats=num_items, dim=0), torch.cat([item_embeddings, item_embeddings_static], dim=1).repeat(size, 1)).squeeze(-1)
-
-                    # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-                    true_item_distance = euclidean_distances[tbatch_itemids + np.arrange(size) * num_items]
-                    euclidean_distances = euclidean_distances.reshape(num_items, size)
-                    euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
-                    true_item_rank = euclidean_distances_smaller.sum(axis=1) + 1
-
                     for en, idx in enumerate(lib.current_tbatches_interactionids[i]):
+                        # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
+                        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding[en:en + 1].repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+
+                        # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
+                        true_item_distance = euclidean_distances[tbatch_itemids[en], tbatch_itemids[en] + 1]
+                        euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
+                        true_item_rank = np.sum(euclidean_distances_smaller) + 1
+
                         if idx < test_start_idx:
-                            validation_ranks.append(true_item_rank[en])
+                            validation_ranks.append(true_item_rank)
                         else:
-                            test_ranks.append(true_item_rank[en])
+                            test_ranks.append(true_item_rank)
 
                     # CALCULATE PREDICTION LOSS
                     item_embedding_input = item_embeddings[tbatch_itemids, :]
-                    loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                    loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embeddings_static[tbatch_itemids, :]], dim=1).detach())
 
                     # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                     user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
