@@ -225,7 +225,7 @@ with trange(args.epochs) as progress_bar1:
         # END OF ONE EPOCH
         print "\n\nTotal loss in this epoch = %f" % (total_loss)
         item_embeddings_dystat = torch.cat([item_embeddings, item_embedding_static], dim=1)
-        user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
+        user_embeddings_dystat = torch.cat([user_embeddings], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
         all_total_losses.append(total_loss)

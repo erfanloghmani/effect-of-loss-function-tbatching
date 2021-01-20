@@ -91,7 +91,7 @@ class JODIE(nn.Module):
             return user_projected_embedding
 
     def context_convert(self, embeddings, timediffs, features):
-        new_embeddings = embeddings * (1 + self.embedding_layer(timediffs))
+        new_embeddings = embeddings * (1) # + self.embedding_layer(timediffs))
         return new_embeddings
 
     def predict_label(self, user_embeddings):
