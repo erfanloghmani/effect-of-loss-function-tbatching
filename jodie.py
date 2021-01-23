@@ -38,7 +38,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, item_previous_interaction] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"

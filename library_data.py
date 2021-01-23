@@ -81,6 +81,8 @@ def load_network(args, time_scaling=True):
     user_current_timestamp = defaultdict(float)
     user_previous_itemid_sequence = []
     user_latest_itemid = defaultdict(lambda: num_items)
+    item_latest_interaction = defaultdict(lambda: -1)
+    item_previous_interaction = []
     for cnt, user in enumerate(user_sequence):
         if user not in user2id:
             user2id[user] = nodeid
@@ -90,6 +92,8 @@ def load_network(args, time_scaling=True):
         user_current_timestamp[user] = timestamp
         user_previous_itemid_sequence.append(user_latest_itemid[user])
         user_latest_itemid[user] = item2id[item_sequence[cnt]]
+        item_previous_interaction.append(item_latest_interaction[item_sequence[cnt]])
+        item_latest_interaction[item_sequence[cnt]] = cnt
     num_users = len(user2id)
     user_sequence_id = [user2id[user] for user in user_sequence]
 
@@ -103,5 +107,5 @@ def load_network(args, time_scaling=True):
         item2id, item_sequence_id, item_timedifference_sequence, \
         timestamp_sequence, \
         feature_sequence, \
-        y_true_labels]
+        y_true_labels, item_previous_interaction]
 
