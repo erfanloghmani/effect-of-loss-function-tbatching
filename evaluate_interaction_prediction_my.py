@@ -215,8 +215,8 @@ for user_id, interaction_list in tqdm(user_interaction_list.items()):
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s.json' % (args.model, args.data, args.epoch), 'w'))
-json.dump(test_ranks, open('results/test_ranks_%s_%s_%s.json' % (args.model, args.data, args.epoch), 'w'))
+json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s.json' % (args.model, args.network, args.epoch), 'w'))
+json.dump(test_ranks, open('results/test_ranks_%s_%s_%s.json' % (args.model, args.network, args.epoch), 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
