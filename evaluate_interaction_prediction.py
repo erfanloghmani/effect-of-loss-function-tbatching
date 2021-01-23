@@ -38,7 +38,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/interaction_prediction_%s.txt" % args.network
+output_fname = "results/interaction_prediction_%s_%s.txt" % (args.model, args.network)
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
@@ -205,8 +205,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/validation_ranks_%s.json' % args.epoch, 'w'))
-json.dump(test_ranks, open('results/test_ranks_%s.json' % args.epoch, 'w'))
+json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
+json.dump(test_ranks, open('results/test_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
