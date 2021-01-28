@@ -38,7 +38,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, item_cats] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
@@ -65,7 +65,9 @@ tbatch_timespan = timespan / 500
 # INITIALIZE MODEL AND PARAMETERS
 model = JODIE(args, num_features, num_users, num_items).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
+cats_weight = torch.Tensor(1 / item_cats.sum(0)).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
+catsCrossEntropyLoss = nn.CrossEntropyLoss(weight=cats_weight)
 MSELoss = nn.MSELoss()
 
 # INITIALIZE EMBEDDING
@@ -170,6 +172,7 @@ with trange(args.epochs) as progress_bar1:
                             user_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_user_timediffs[i]).cuda()).unsqueeze(1)
                             item_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_item_timediffs[i]).cuda()).unsqueeze(1)
                             tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).cuda()
+                            item_cats_true = torch.Tensor(item_cats[tbatch_itemids, :].reshape(-1, item_cats.shape[1])).cuda()
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
@@ -197,6 +200,9 @@ with trange(args.epochs) as progress_bar1:
                             # CALCULATE LOSS TO MAINTAIN TEMPORAL SMOOTHNESS
                             loss += MSELoss(item_embedding_output, item_embedding_input.detach())
                             loss += MSELoss(user_embedding_output, user_embedding_input.detach())
+
+                            predicted_cats = model.predict_cat(user_embedding_input, item_embedding_previous)
+                            loss += catsCrossEntropyLoss(predicted_cats, item_cats_true)
 
                             # CALCULATE STATE CHANGE LOSS
                             if args.state_change:

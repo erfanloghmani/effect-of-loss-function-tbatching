@@ -31,6 +31,9 @@ def load_network(args, time_scaling=True):
 
     network = args.network
     datapath = args.datapath
+    cats_path = "data/%s_items_cats.npy" % args.network
+
+    item_cats = np.load(cats_path)
 
     user_sequence = []
     item_sequence = []
@@ -103,5 +106,5 @@ def load_network(args, time_scaling=True):
         item2id, item_sequence_id, item_timedifference_sequence, \
         timestamp_sequence, \
         feature_sequence, \
-        y_true_labels]
+        y_true_labels, item_cats]
 
