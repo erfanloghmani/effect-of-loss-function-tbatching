@@ -54,7 +54,7 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true] = load_network(args)
+ y_true, item_cats] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
@@ -78,9 +78,11 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_cats.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
+cats_weight = torch.Tensor(1 / item_cats.sum(0)).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
+catsCrossEntropyLoss = nn.CrossEntropyLoss(weight=cats_weight)
 MSELoss = nn.MSELoss()
 
 # INITIALIZE MODEL
@@ -148,6 +150,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).cuda()).unsqueeze(0)
         item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).cuda()).unsqueeze(0)
         item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
+        item_cats_true = torch.LongTensor(item_cats[itemid, :].reshape(-1, item_cats.shape[1]).argmax(1)).cuda()
 
         # PROJECT USER EMBEDDING
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
@@ -185,6 +188,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # CALCULATE LOSS TO MAINTAIN TEMPORAL SMOOTHNESS
         loss += MSELoss(item_embedding_output, item_embedding_input.detach())
         loss += MSELoss(user_embedding_output, user_embedding_input.detach())
+
+        predicted_cats = model.predict_cat(user_embedding_input, item_embedding_previous)
+        loss += catsCrossEntropyLoss(predicted_cats, item_cats_true)
 
         # CALCULATE STATE CHANGE LOSS
         if args.state_change:
