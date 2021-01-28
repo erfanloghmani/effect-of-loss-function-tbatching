@@ -63,9 +63,9 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL AND PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_cats.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
-cats_weight = torch.Tensor(1 / item_cats.sum(0)).cuda()
+cats_weight = torch.tensor(1 / item_cats.sum(0), dtype=torch.float).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 catsCrossEntropyLoss = nn.CrossEntropyLoss(weight=cats_weight)
 MSELoss = nn.MSELoss()
@@ -172,7 +172,7 @@ with trange(args.epochs) as progress_bar1:
                             user_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_user_timediffs[i]).cuda()).unsqueeze(1)
                             item_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_item_timediffs[i]).cuda()).unsqueeze(1)
                             tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).cuda()
-                            item_cats_true = torch.Tensor(item_cats[tbatch_itemids, :].reshape(-1, item_cats.shape[1])).cuda()
+                            item_cats_true = torch.LongTensor(item_cats[tbatch_itemids, :].reshape(-1, item_cats.shape[1]).argmax(1)).cuda()
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
