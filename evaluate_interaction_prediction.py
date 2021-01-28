@@ -54,7 +54,7 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true] = load_network(args)
+ y_true, item_texts] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
@@ -78,7 +78,7 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_texts.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
@@ -172,9 +172,11 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         else:
             test_ranks.append(true_item_rank)
 
+        item_embedding_text_input = item_texts[itemid, :].reshape(-1, item_texts.shape[1])
+        features_full = torch.cat([feature_tensor, torch.tensor(item_embedding_text_input, dtype=torch.float).cuda()], dim=1)
         # UPDATE USER AND ITEM EMBEDDING
-        user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
-        item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
+        user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=features_full, select='user_update')
+        item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=features_full, select='item_update')
 
         # SAVE EMBEDDINGS
         item_embeddings[itemid, :] = item_embedding_output.squeeze(0)
