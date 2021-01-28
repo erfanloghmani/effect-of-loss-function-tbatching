@@ -182,8 +182,8 @@ with trange(args.epochs) as progress_bar1:
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            item_embedding_text_input = item_texts[tbatch_itemids, :]
-                            features_full = torch.cat([feature_tensor, item_embedding_text_input], dim=1)
+                            item_embedding_text_input = item_texts[tbatch_itemids, :].reshape(-1, item_texts.shape[1])
+                            features_full = torch.cat([feature_tensor, torch.tensor(item_embedding_text_input, dtype=torch.float).cuda()], dim=1)
                             loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
