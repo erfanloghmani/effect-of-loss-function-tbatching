@@ -43,7 +43,7 @@ class NormalLinear(nn.Linear):
 
 # THE JODIE MODULE
 class JODIE(nn.Module):
-    def __init__(self, args, num_features, num_users, num_items):
+    def __init__(self, args, num_features, num_users, num_items, item_features):
         super(JODIE,self).__init__()
 
         print "*** Initializing the JODIE model ***"
@@ -53,12 +53,13 @@ class JODIE(nn.Module):
         self.num_items = num_items
         self.user_static_embedding_size = num_users
         self.item_static_embedding_size = num_items
+        self.item_features = item_features
 
         print "Initializing user and item embeddings"
         self.initial_user_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
         self.initial_item_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
 
-        rnn_input_size_items = rnn_input_size_users = self.embedding_dim + 1 + num_features
+        rnn_input_size_items = rnn_input_size_users = self.embedding_dim + 1 + item_features + num_features
 
         print "Initializing user and item RNNs"
         self.item_rnn = nn.RNNCell(rnn_input_size_users, self.embedding_dim)
