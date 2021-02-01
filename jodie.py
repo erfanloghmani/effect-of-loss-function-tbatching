@@ -63,7 +63,7 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL AND PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
@@ -79,7 +79,7 @@ item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all 
 item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
 user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
 
-item_word_embs_torch = torch.tensor(item_word_embs).cuda()
+item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).cuda()
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
@@ -174,8 +174,8 @@ with trange(args.epochs) as progress_bar1:
                             tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).cuda()
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
 
-                            item_word_embs_input = item_word_embs[tbatch_itemids, :]
-                            item_word_embs_previous = item_word_embs[tbatch_itemids_previous, :]
+                            item_word_embs_input = item_word_embs_torch[tbatch_itemids, :]
+                            item_word_embs_previous = item_word_embs_torch[tbatch_itemids_previous, :]
                             feature_tensor_full = torch.cat([feature_tensor, item_word_embs_previous], dim=1)
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
