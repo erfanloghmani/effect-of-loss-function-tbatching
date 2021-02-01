@@ -43,7 +43,7 @@ class NormalLinear(nn.Linear):
 
 # THE JODIE MODULE
 class JODIE(nn.Module):
-    def __init__(self, args, num_features, num_users, num_items):
+    def __init__(self, args, num_features, num_users, num_items, num_item_features):
         super(JODIE,self).__init__()
 
         print "*** Initializing the JODIE model ***"
@@ -51,6 +51,7 @@ class JODIE(nn.Module):
         self.embedding_dim = args.embedding_dim
         self.num_users = num_users
         self.num_items = num_items
+        self.num_item_features = num_item_features
         self.user_static_embedding_size = num_users
         self.item_static_embedding_size = num_items
 
@@ -58,7 +59,7 @@ class JODIE(nn.Module):
         self.initial_user_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
         self.initial_item_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
 
-        rnn_input_size_items = rnn_input_size_users = self.embedding_dim + 1 + num_features
+        rnn_input_size_items = rnn_input_size_users = self.embedding_dim + 1 + num_features + num_item_features
 
         print "Initializing user and item RNNs"
         self.item_rnn = nn.RNNCell(rnn_input_size_users, self.embedding_dim)
@@ -67,7 +68,7 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self. + self.embedding_dim + self.embedding_dim * 2, self.item_static_embedding_size + self.num_item_features + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
         

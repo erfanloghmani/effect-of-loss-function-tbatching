@@ -38,7 +38,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, item_word_embs] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
@@ -78,6 +78,8 @@ user_embeddings = initial_user_embedding.repeat(num_users, 1)  # initialize all 
 item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all items to the same embedding
 item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors for static embeddings
 user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
+
+item_word_embs_torch = torch.tensor(item_word_embs).cuda()
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
@@ -172,21 +174,25 @@ with trange(args.epochs) as progress_bar1:
                             tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).cuda()
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
 
+                            item_word_embs_input = item_word_embs[tbatch_itemids, :]
+                            item_word_embs_previous = item_word_embs[tbatch_itemids_previous, :]
+                            feature_tensor_full = torch.cat([feature_tensor, item_word_embs_previous], dim=1)
+
                             # PROJECT USER EMBEDDING TO CURRENT TIME
                             user_embedding_input = user_embeddings[tbatch_userids, :]
                             user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-                            user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
+                            user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_word_embs_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
                             predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_word_embs_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
-                            user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
-                            item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
+                            user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor_full, select='user_update')
+                            item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor_full, select='item_update')
 
                             item_embeddings[tbatch_itemids, :] = item_embedding_output
                             user_embeddings[tbatch_userids, :] = user_embedding_output
