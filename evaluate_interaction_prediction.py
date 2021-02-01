@@ -54,7 +54,7 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true] = load_network(args)
+ y_true, item_word_embs] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
@@ -78,7 +78,7 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).cuda()
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
@@ -105,6 +105,8 @@ user_embeddings = user_embeddings_dystat[:, :args.embedding_dim]
 user_embeddings = user_embeddings.clone()
 user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
 user_embeddings_static = user_embeddings_static.clone()
+
+item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).cuda()
 
 # PERFORMANCE METRICS
 validation_ranks = []
@@ -149,15 +151,19 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).cuda()).unsqueeze(0)
         item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
 
+        item_word_embs_input = item_word_embs_torch[torch.cuda.LongTensor([itemid]), :]
+        item_word_embs_previous = item_word_embs_torch[torch.cuda.LongTensor([itemid_previous]), :]
+        feature_tensor_full = torch.cat([feature_tensor, item_word_embs_previous], dim=1)
+
         # PROJECT USER EMBEDDING
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
-        user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
+        user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_word_embs_previous, item_embeddings_static[torch.cuda.LongTensor([itemid_previous])], user_embedding_static_input], dim=1)
 
         # PREDICT ITEM EMBEDDING
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_word_embs_input, item_embedding_static_input], dim=1).detach())
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
@@ -173,8 +179,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             test_ranks.append(true_item_rank)
 
         # UPDATE USER AND ITEM EMBEDDING
-        user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
-        item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
+        user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor_full, select='user_update')
+        item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor_full, select='item_update')
 
         # SAVE EMBEDDINGS
         item_embeddings[itemid, :] = item_embedding_output.squeeze(0)
