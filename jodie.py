@@ -67,6 +67,7 @@ model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1])
 weight = torch.Tensor([1, true_labels_ratio]).cuda()
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELoss_no_reduce = nn.MSELoss(reduction='none')
 
 # INITIALIZE EMBEDDING
 initial_user_embedding = nn.Parameter(F.normalize(torch.rand(args.embedding_dim).cuda(), dim=0))  # the initial user and item embeddings are learned during training as well
@@ -186,9 +187,14 @@ with trange(args.epochs) as progress_bar1:
                             # PREDICT NEXT ITEM EMBEDDING
                             predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
+                            weight_dynamic = predicted_item_embedding[-2, :]
+                            weight_word_emb = predicted_item_embedding[-1, :]
+
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_word_embs_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:args.embedding_dim], item_embedding_input.detach()).sum(1))
+                            loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(predicted_item_embedding[args.embedding_dim:args.embedding_dim+item_word_embs.shape[1]], item_word_embs_input).sum(1))
+                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[args.embedding_dim + item_word_embs.shape[1]:-2], item_embedding_static[tbatch_itemids, :]).sum(1))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor_full, select='user_update')
