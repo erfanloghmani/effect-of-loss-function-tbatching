@@ -162,15 +162,25 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # PREDICT ITEM EMBEDDING
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
+        weight_dynamic = predicted_item_embedding[:, -2]
+        weight_word_emb = predicted_item_embedding[:, -1]
+
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_word_embs_input, item_embedding_static_input], dim=1).detach())
+        # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape)
+        loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
+        loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:args.embedding_dim + item_word_embs.shape[1]], item_word_embs_input).sum(1))
+        loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim + item_word_embs.shape[1]:-2], item_embedding_static_input).sum(1))
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_word_embs_torch, item_embeddings_static], dim=1)).squeeze(-1)
+        euclidean_distances_dyn = nn.PairwiseDistance()(predicted_item_embedding[:, :args.embedding_dim].repeat(num_items, 1), item_embeddings).squeeze(-1)
+        euclidean_distances_word = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim:args.embedding_dim + item_word_embs.shape[1]].repeat(num_items, 1), item_word_embs_torch).squeeze(-1)
+        euclidean_distances_word = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim + item_word_embs.shape[1]:-2].repeat(num_items, 1), item_embedding_static).squeeze(-1)
+
+        agg_distances = weight_dynamic * torch.pow(euclidean_distances_dyn, 2) + weight_word_emb * torch.pow(euclidean_distances_dyn, 2) + torch.pow(euclidean_distances_word)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-        true_item_distance = euclidean_distances[itemid]
-        euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
+        true_item_distance = agg_distances[itemid]
+        euclidean_distances_smaller = (agg_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
         if j < test_start_idx:
