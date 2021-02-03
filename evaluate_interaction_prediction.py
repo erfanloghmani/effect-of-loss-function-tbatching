@@ -18,6 +18,7 @@ import json
 parser = argparse.ArgumentParser()
 parser.add_argument('--network', required=True, help='Network name')
 parser.add_argument('--model', default='jodie', help="Model name")
+parser.add_argument('--features_suffix', default="items", help='Suffix of features file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epoch', default=50, type=int, help='Epoch id to load')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions')
@@ -38,7 +39,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/interaction_prediction_%s_%s.txt" % (args.model, args.network)
+output_fname = "results/interaction_prediction_%s_%s_%s.txt" % (args.model, args.features_suffix, args.network)
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
@@ -211,8 +212,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
-json.dump(test_ranks, open('results/test_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
+json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s_%s.json' % (args.epoch, args.model, args.features_suffix, args.network), 'w'))
+json.dump(test_ranks, open('results/test_ranks_%s_%s_%s_%s.json' % (args.epoch, args.model, args.features_suffix, args.network), 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks

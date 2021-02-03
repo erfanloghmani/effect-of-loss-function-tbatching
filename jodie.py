@@ -17,6 +17,7 @@ from library_models import *
 parser = argparse.ArgumentParser()
 parser.add_argument('--network', required=True, help='Name of the network/dataset')
 parser.add_argument('--model', default="jodie", help='Model name to save output in file')
+parser.add_argument('--features_suffix', default="items", help='Suffix of features file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epochs', default=50, type=int, help='Number of epochs to train the model')
 parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
@@ -232,7 +233,7 @@ with trange(args.epochs) as progress_bar1:
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
         all_total_losses.append(total_loss)
-        json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
+        json.dump(all_total_losses, open('results/jodie_%s_%s_%s_training_total_losses.json' % (args.network, args.model, args.feature_sequence), 'w'))
 
         user_embeddings = initial_user_embedding.repeat(num_users, 1)
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
@@ -240,4 +241,4 @@ with trange(args.epochs) as progress_bar1:
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
 print "\n\n*** Training complete. Saving final model. ***\n\n"
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
-json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
+json.dump(all_total_losses, open('results/jodie_%s_%s_%s_training_total_losses.json' % (args.network, args.model, args.feature_sequence), 'w'))
