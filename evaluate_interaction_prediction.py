@@ -153,7 +153,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         item_word_embs_input = item_word_embs_torch[torch.cuda.LongTensor([itemid]), :]
         item_word_embs_previous = item_word_embs_torch[torch.cuda.LongTensor([itemid_previous]), :]
-        feature_tensor_full = torch.cat([feature_tensor, item_word_embs_previous], dim=1)
+        feature_tensor_full = torch.cat([feature_tensor, item_word_embs_input], dim=1)
 
         # PROJECT USER EMBEDDING
         user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')

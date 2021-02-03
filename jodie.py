@@ -176,7 +176,7 @@ with trange(args.epochs) as progress_bar1:
 
                             item_word_embs_input = item_word_embs_torch[tbatch_itemids, :]
                             item_word_embs_previous = item_word_embs_torch[tbatch_itemids_previous, :]
-                            feature_tensor_full = torch.cat([feature_tensor, item_word_embs_previous], dim=1)
+                            feature_tensor_full = torch.cat([feature_tensor, item_word_embs_input], dim=1)
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
                             user_embedding_input = user_embeddings[tbatch_userids, :]
