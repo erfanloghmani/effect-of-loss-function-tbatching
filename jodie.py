@@ -233,7 +233,7 @@ with trange(args.epochs) as progress_bar1:
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
         all_total_losses.append(total_loss)
-        json.dump(all_total_losses, open('results/jodie_%s_%s_%s_training_total_losses.json' % (args.network, args.model, args.feature_sequence), 'w'))
+        json.dump(all_total_losses, open('results/jodie_%s_%s_%s_training_total_losses.json' % (args.network, args.model, args.features_suffix), 'w'))
 
         user_embeddings = initial_user_embedding.repeat(num_users, 1)
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
@@ -241,4 +241,4 @@ with trange(args.epochs) as progress_bar1:
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
 print "\n\n*** Training complete. Saving final model. ***\n\n"
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
-json.dump(all_total_losses, open('results/jodie_%s_%s_%s_training_total_losses.json' % (args.network, args.model, args.feature_sequence), 'w'))
+json.dump(all_total_losses, open('results/jodie_%s_%s_%s_training_total_losses.json' % (args.network, args.model, args.features_suffix), 'w'))
