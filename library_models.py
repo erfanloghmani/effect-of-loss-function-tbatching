@@ -168,7 +168,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
 def load_model(model, optimizer, args, epoch):
     modelname = args.model
-    filename = PATH + "saved_models/%s/checkpoint.%s.%s.ep%d.tp%.1f.pth.tar" % (args.network, args.features_suffix, modelname, epoch, args.train_proportion)
+    filename = PATH + "saved_models/%s/checkpoint.%s.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, args.features_suffix, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
     print "Loading saved embeddings and model: %s" % filename
     args.start_epoch = checkpoint['epoch']
