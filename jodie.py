@@ -182,7 +182,13 @@ with trange(args.epochs) as progress_bar1:
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+
+                            weight_dynamic = predicted_item_embedding[:, -1]
+
+                            # CALCULATE PREDICTION LOSS
+                            # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape)
+                            loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
+                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-1], item_embedding_static[tbatch_itemids, :]).sum(1))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
