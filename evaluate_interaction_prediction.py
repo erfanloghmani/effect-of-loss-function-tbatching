@@ -169,12 +169,12 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # CALCULATE PREDICTION LOSS
         # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape)
         loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
-        loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:args.embedding_dim + item_word_embs.shape[1]], item_word_embs_input).sum(1))
-        loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim + item_word_embs.shape[1]:-2], item_embedding_static_input).sum(1))
+        loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(item_word_embs_previous, item_word_embs_input).sum(1))
+        loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-2], item_embedding_static_input).sum(1))
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances_dyn = nn.PairwiseDistance()(predicted_item_embedding[:, :args.embedding_dim].repeat(num_items, 1), item_embeddings).squeeze(-1)
-        euclidean_distances_word = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim:args.embedding_dim + item_word_embs.shape[1]].repeat(num_items, 1), item_word_embs_torch).squeeze(-1)
+        euclidean_distances_word = nn.PairwiseDistance()(item_word_embs_previous.repeat(num_items, 1), item_word_embs_torch).squeeze(-1)
         euclidean_distances_static = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim + item_word_embs.shape[1]:-2].repeat(num_items, 1), item_embeddings_static).squeeze(-1)
 
         agg_distances = torch.exp(weight_dynamic) * torch.pow(euclidean_distances_dyn, 2) + torch.exp(weight_word_emb) * torch.pow(euclidean_distances_word, 2) + torch.pow(euclidean_distances_static, 2)

@@ -194,8 +194,8 @@ with trange(args.epochs) as progress_bar1:
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
                             # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape) 
                             loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
-                            loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:args.embedding_dim+item_word_embs.shape[1]], item_word_embs_input).sum(1))
-                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim + item_word_embs.shape[1]:-2], item_embedding_static[tbatch_itemids, :]).sum(1))
+                            loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(item_word_embs_previous, item_word_embs_input).sum(1))
+                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-2], item_embedding_static[tbatch_itemids, :]).sum(1))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor_full, select='user_update')
