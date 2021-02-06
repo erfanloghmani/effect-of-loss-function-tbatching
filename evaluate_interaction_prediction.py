@@ -107,6 +107,9 @@ user_embeddings = user_embeddings.clone()
 user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
 user_embeddings_static = user_embeddings_static.clone()
 
+del(user_embeddings_dystat)
+del(item_embeddings_dystat)
+
 # PERFORMANCE METRICS
 validation_ranks = []
 test_ranks = []

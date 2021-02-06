@@ -102,12 +102,15 @@ if (args.init_epoch >= 0):
     user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
     user_embeddings_static = user_embeddings_static.clone()
 
+    del(user_embeddings_dystat)
+    del(item_embeddings_dystat)
+
 # RUN THE JODIE MODEL
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
 print "*** Training the JODIE model for %d epochs ***" % args.epochs
-with trange(args.epochs) as progress_bar1:
+with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
 
@@ -226,6 +229,8 @@ with trange(args.epochs) as progress_bar1:
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
+        del(user_embeddings_dystat)
+        del(item_embeddings_dystat)
         all_total_losses.append(total_loss)
         json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
 
