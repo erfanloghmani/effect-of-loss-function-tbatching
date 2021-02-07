@@ -87,7 +87,7 @@ user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors
 
 item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).cuda()
 user_last_word_in_cluster = torch.zeros((num_users, N_CLUSTERS, item_word_embs.shape[1])).cuda()
-user_saw_word_in_cluster = torch.zeros((num_users, N_CLUSTERS)).cuda()
+user_saw_cluster = torch.zeros((num_users, N_CLUSTERS)).cuda()
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
@@ -186,7 +186,7 @@ with trange(args.epochs) as progress_bar1:
                             for j, userid in enumerate(lib.current_tbatches_user[i]):
                                 itemid_prev = lib.current_tbatches_previous_item[i][j]
                                 user_last_word_in_cluster[j, item_clusters[itemid_prev], :] = item_word_embs_torch[itemid_prev]
-                                user_saw_word_in_cluster[j, item_clusters[itemid_prev]] = 1
+                                user_saw_cluster[j, item_clusters[itemid_prev]] = 1
 
                             item_word_embs_input = item_word_embs_torch[tbatch_itemids, :]
                             item_word_embs_previous = item_word_embs_torch[tbatch_itemids_previous, :]
@@ -201,9 +201,9 @@ with trange(args.epochs) as progress_bar1:
                             predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
                             tbatch_user_last_word_in_cluster = user_last_word_in_cluster[tbatch_userids]
+                            tbatch_user_saw_cluster = user_saw_cluster[tbatch_userids]
                             tbatch_full_user_repeat = torch.cat([user_embedding_input, user_embedding_static[tbatch_userids, :]], dim=1).unsqueeze(1).repeat((1, N_CLUSTERS, 1))
                             predicted_weights = model.predict_weight(tbatch_full_user_repeat, tbatch_user_last_word_in_cluster)
-                            print(predicted_weights.shape)
 
                             weight_dynamic = predicted_item_embedding[:, -1]
 
@@ -211,7 +211,7 @@ with trange(args.epochs) as progress_bar1:
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
                             # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape) 
                             loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
-                            # loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(item_word_embs_previous, item_word_embs_input).sum(1))
+                            loss += torch.sum(MSELoss_no_reduce(tbatch_user_last_word_in_cluster, item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * predicted_weights.squeeze(2) * tbatch_user_saw_cluster)
                             loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-2], item_embedding_static[tbatch_itemids, :]).sum(1))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
