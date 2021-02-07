@@ -61,7 +61,7 @@ Longer timespans mean more interactions are processed and the training time is r
 Longer timespan leads to less frequent model updates.
 '''
 timespan = timestamp_sequence[-1] - timestamp_sequence[0]
-tbatch_timespan = timespan / 500
+tbatch_timespan = timespan / 600
 
 # INITIALIZE MODEL AND PARAMETERS
 model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).cuda()
@@ -70,7 +70,7 @@ crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 MSELoss_no_reduce = nn.MSELoss(reduction='none')
 
-N_CLUSTERS = 64
+N_CLUSTERS = 48
 km = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(item_word_embs)
 item_clusters = km.predict(item_word_embs)
 
@@ -212,7 +212,7 @@ with trange(args.epochs) as progress_bar1:
                             # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape) 
                             loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
                             loss += torch.sum(MSELoss_no_reduce(tbatch_user_last_word_in_cluster, item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * predicted_weights.squeeze(2) * tbatch_user_saw_cluster)
-                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-2], item_embedding_static[tbatch_itemids, :]).sum(1))
+                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-1], item_embedding_static[tbatch_itemids, :]).sum(1))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor_full, select='user_update')
@@ -255,6 +255,8 @@ with trange(args.epochs) as progress_bar1:
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
+        del(item_embeddings_dystat)
+        del(user_embeddings_dystat)
         all_total_losses.append(total_loss)
         json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
 
