@@ -68,7 +68,9 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.num_item_features + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim + 2)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.num_item_features + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim + 1)
+        self.weight_layer1 = nn.Linear(self.user_static_embedding_size + self.embedding_dim + self.num_item_features, 16)
+        self.weight_layer2 = nn.Linear(16, 1)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
         
@@ -95,6 +97,11 @@ class JODIE(nn.Module):
     def predict_label(self, user_embeddings):
         X_out = nn.ReLU()(self.linear_layer1(user_embeddings))
         X_out = self.linear_layer2(X_out)
+        return X_out
+
+    def predict_weight(self, user_embeddings, word_features):
+        X_out = nn.ReLU()(self.weight_layer1(torch.cat([user_embeddings, word_features], dim=1)))
+        X_out = self.weight_layer2(X_out)
         return X_out
 
     def predict_item_embedding(self, user_embeddings):
