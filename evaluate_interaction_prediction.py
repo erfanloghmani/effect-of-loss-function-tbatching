@@ -84,6 +84,10 @@ crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 MSELoss_no_reduce = nn.MSELoss(reduction='none')
 
+N_CLUSTERS = 32
+km = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(item_word_embs)
+item_clusters = km.predict(item_word_embs)
+
 # INITIALIZE MODEL
 learning_rate = 1e-3
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
@@ -108,6 +112,8 @@ user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
 user_embeddings_static = user_embeddings_static.clone()
 
 item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).cuda()
+user_last_word_in_cluster = torch.zeros((num_users, N_CLUSTERS, item_word_embs.shape[1])).cuda()
+user_saw_cluster = torch.zeros((num_users, N_CLUSTERS)).cuda()
 
 # PERFORMANCE METRICS
 validation_ranks = []
@@ -126,6 +132,13 @@ Please note that since each interaction in validation and test is only seen once
 tbatch_start_time = None
 loss = 0
 # FORWARD PASS
+with trange(train_end_idx) as progress_bar:
+    for j in progress_bar:
+        userid = user_sequence_id[j]
+        itemid_previous = user_previous_itemid_sequence[j]
+        user_last_word_in_cluster[j, item_clusters[itemid_previous], :] = item_word_embs_torch[itemid_previous]
+        user_saw_cluster[j, item_clusters[itemid_prev]] = 1
+
 print "*** Making interaction predictions by forward pass (no t-batching) ***"
 with trange(train_end_idx, test_end_idx) as progress_bar:
     for j in progress_bar:
@@ -141,6 +154,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         if not tbatch_start_time:
             tbatch_start_time = timestamp
         itemid_previous = user_previous_itemid_sequence[j]
+
+        user_last_word_in_cluster[j, item_clusters[itemid_previous], :] = item_word_embs_torch[itemid_previous]
+        user_saw_cluster[j, item_clusters[itemid_prev]] = 1
 
         # LOAD USER AND ITEM EMBEDDING
         user_embedding_input = user_embeddings[torch.cuda.LongTensor([userid])]
@@ -163,21 +179,25 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # PREDICT ITEM EMBEDDING
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
-        weight_dynamic = predicted_item_embedding[:, -2]
-        weight_word_emb = predicted_item_embedding[:, -1]
+        cur_user_last_word_in_cluster = user_last_word_in_cluster[torch.cuda.LongTensor([userid])]
+        cur_user_saw_cluster = user_saw_cluster[torch.cuda.LongTensor([userid])]
+        cur_full_user_repeat = torch.cat([user_embedding_input, user_embedding_static[torch.cuda.LongTensor([userid]), :]], dim=1).unsqueeze(1).repeat((1, N_CLUSTERS, 1))
+        predicted_weights = model.predict_weight(tbatch_full_user_repeat, tbatch_user_last_word_in_cluster)
+
+        weight_dynamic = predicted_item_embedding[:, -1]
 
         # CALCULATE PREDICTION LOSS
         # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape)
         loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
-        loss += torch.sum(torch.exp(weight_word_emb) * MSELoss_no_reduce(item_word_embs_previous, item_word_embs_input).sum(1))
-        loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-2], item_embedding_static_input).sum(1))
+        loss += torch.sum(MSELoss_no_reduce(cur_user_last_word_in_cluster, item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * torch.exp(predicted_weights).squeeze(2) * cur_user_saw_cluster)
+        loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-1], item_embedding_static_input).sum(1))
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances_dyn = nn.PairwiseDistance()(predicted_item_embedding[:, :args.embedding_dim].repeat(num_items, 1), item_embeddings).squeeze(-1)
-        euclidean_distances_word = nn.PairwiseDistance()(item_word_embs_previous.repeat(num_items, 1), item_word_embs_torch).squeeze(-1)
-        euclidean_distances_static = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim + item_word_embs.shape[1]:-2].repeat(num_items, 1), item_embeddings_static).squeeze(-1)
+        euclidean_distances_words = nn.PairwiseDistance()(cur_user_last_word_in_cluster.view(-1, 32).repeat(num_items, 1), item_word_embs_torch.repeat(N_CLUSTERS, 1)).squeeze(-1).view(-1, 32, num_items)
+        euclidean_distances_static = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim:-1].repeat(num_items, 1), item_embeddings_static).squeeze(-1)
 
-        agg_distances = torch.exp(weight_dynamic) * torch.pow(euclidean_distances_dyn, 2) + torch.exp(weight_word_emb) * torch.pow(euclidean_distances_word, 2) + torch.pow(euclidean_distances_static, 2)
+        agg_distances = torch.exp(weight_dynamic) * torch.pow(euclidean_distances_dyn, 2) + (torch.exp(predicted_weights) * torch.pow(euclidean_distances_words, 2) * cur_user_saw_cluster.unsqueeze(2)).sum(1) + torch.pow(euclidean_distances_static, 2)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         true_item_distance = agg_distances[itemid]
