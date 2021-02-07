@@ -70,7 +70,7 @@ crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 MSELoss_no_reduce = nn.MSELoss(reduction='none')
 
-N_CLUSTERS = 48
+N_CLUSTERS = 32
 km = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(item_word_embs)
 item_clusters = km.predict(item_word_embs)
 
@@ -211,7 +211,7 @@ with trange(args.epochs) as progress_bar1:
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
                             # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape) 
                             loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
-                            loss += torch.sum(MSELoss_no_reduce(tbatch_user_last_word_in_cluster, item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * predicted_weights.squeeze(2) * tbatch_user_saw_cluster)
+                            loss += torch.sum(MSELoss_no_reduce(tbatch_user_last_word_in_cluster, item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * torch.exp(predicted_weights).squeeze(2) * tbatch_user_saw_cluster)
                             loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-1], item_embedding_static[tbatch_itemids, :]).sum(1))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
