@@ -100,7 +100,7 @@ class JODIE(nn.Module):
         return X_out
 
     def predict_weight(self, user_embeddings, word_features):
-        X_out = nn.ReLU()(self.weight_layer1(torch.cat([user_embeddings, word_features], dim=1)))
+        X_out = nn.ReLU()(self.weight_layer1(torch.cat([user_embeddings, word_features], dim=2)))
         X_out = self.weight_layer2(X_out)
         return X_out
 

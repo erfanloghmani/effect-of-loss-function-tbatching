@@ -86,7 +86,7 @@ item_embedding_static = Variable(torch.eye(num_items).cuda())  # one-hot vectors
 user_embedding_static = Variable(torch.eye(num_users).cuda())  # one-hot vectors for static embeddings
 
 item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).cuda()
-user_last_word_in_cluster = torch.zeros((num_users, N_CLUSTERS, item_word_embs.shape[0])).cuda()
+user_last_word_in_cluster = torch.zeros((num_users, N_CLUSTERS, item_word_embs.shape[1])).cuda()
 user_saw_word_in_cluster = torch.zeros((num_users, N_CLUSTERS)).cuda()
 
 # INITIALIZE MODEL
