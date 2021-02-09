@@ -190,14 +190,14 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape)
         loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
         loss += torch.sum(MSELoss_no_reduce(cur_user_last_word_in_cluster, item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * torch.exp(predicted_weights).squeeze(2) * cur_user_saw_cluster)
-        loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-1], item_embedding_static_input).sum(1))
+        # loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-1], item_embedding_static_input).sum(1))
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances_dyn = nn.PairwiseDistance()(predicted_item_embedding[:, :args.embedding_dim].repeat(num_items, 1), item_embeddings).squeeze(-1)
         euclidean_distances_words = nn.PairwiseDistance()(cur_user_last_word_in_cluster.view(-1, 32).repeat(num_items, 1), item_word_embs_torch.repeat(N_CLUSTERS, 1)).squeeze(-1).view(-1, 32, num_items)
-        euclidean_distances_static = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim:-1].repeat(num_items, 1), item_embeddings_static).squeeze(-1)
+        # euclidean_distances_static = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim:-1].repeat(num_items, 1), item_embeddings_static).squeeze(-1)
 
-        agg_distances = torch.exp(weight_dynamic) * torch.pow(euclidean_distances_dyn, 2) + (torch.exp(predicted_weights) * torch.pow(euclidean_distances_words, 2) * cur_user_saw_cluster.unsqueeze(2)).sum(1) + torch.pow(euclidean_distances_static, 2)
+        agg_distances = torch.exp(weight_dynamic) * torch.pow(euclidean_distances_dyn, 2) + (torch.exp(predicted_weights) * torch.pow(euclidean_distances_words, 2) * cur_user_saw_cluster.unsqueeze(2)).sum(1) # + torch.pow(euclidean_distances_static, 2)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         true_item_distance = agg_distances[itemid]
