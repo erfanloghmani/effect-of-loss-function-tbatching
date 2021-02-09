@@ -23,7 +23,8 @@ parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on
 parser.add_argument('--epoch', default=50, type=int, help='Epoch id to load')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Proportion of training interactions')
-parser.add_argument('--state_change', default=True, type=bool, help='True if training with state change of users in addition to the next interaction prediction. False otherwise. By default, set to True. MUST BE THE SAME AS THE ONE USED IN TRAINING.')
+parser.add_argument("--state_change", default=False, action="store_true", help="True if training with state change of users along with interaction prediction. False otherwise. By default, set to True.")
+parser.add_argument('--device', default='gpu', type=str, help='which device to use')
 args = parser.parse_args()
 args.datapath = "data/%s.csv" % args.network
 if args.train_proportion > 0.8:
@@ -32,11 +33,15 @@ if args.network == "mooc":
     print "No interaction prediction for %s" % args.network
     sys.exit(0)
 
-# SET GPU
-if args.gpu == -1:
-    args.gpu = select_free_gpu()
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+if args.device == 'gpu':
+    # SET GPU
+    if args.gpu == -1:
+        args.gpu = select_free_gpu()
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
 output_fname = "results/interaction_prediction_%s_%s.txt" % (args.model, args.network)
@@ -79,8 +84,8 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 500
 
 # INITIALIZE MODEL PARAMETERS
-model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).cuda()
-weight = torch.Tensor([1, true_labels_ratio]).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).to(device)
+weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 MSELoss_no_reduce = nn.MSELoss(reduction='none')
@@ -94,7 +99,7 @@ learning_rate = 1e-3
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
 # LOAD THE MODEL
-model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.epoch)
+model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.epoch, device)
 if train_end_idx != train_end_idx_training:
     sys.exit('Training proportion during training and testing are different. Aborting.')
 
@@ -162,14 +167,14 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         user_saw_cluster[userid, item_clusters[itemid_previous]] = 1
 
         # LOAD USER AND ITEM EMBEDDING
-        user_embedding_input = user_embeddings[torch.cuda.LongTensor([userid])]
-        user_embedding_static_input = user_embeddings_static[torch.cuda.LongTensor([userid])]
-        item_embedding_input = item_embeddings[torch.cuda.LongTensor([itemid])]
-        item_embedding_static_input = item_embeddings_static[torch.cuda.LongTensor([itemid])]
-        feature_tensor = Variable(torch.Tensor(feature).cuda()).unsqueeze(0)
-        user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).cuda()).unsqueeze(0)
-        item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).cuda()).unsqueeze(0)
-        item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
+        user_embedding_input = user_embeddings[torch.LongTensor([userid]).to(device)]
+        user_embedding_static_input = user_embeddings_static[torch.LongTensor([userid]).to(device)]
+        item_embedding_input = item_embeddings[torch.LongTensor([itemid]).to(device)]
+        item_embedding_static_input = item_embeddings_static[torch.LongTensor([itemid]).to(device)]
+        feature_tensor = Variable(torch.Tensor(feature).to(device)).unsqueeze(0)
+        user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).to(device)).unsqueeze(0)
+        item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).to(device)).unsqueeze(0)
+        item_embedding_previous = item_embeddings[torch.LongTensor([itemid_previous]).to(device)]
 
         item_word_embs_input = item_word_embs_torch[torch.cuda.LongTensor([itemid]), :]
         item_word_embs_previous = item_word_embs_torch[torch.cuda.LongTensor([itemid_previous]), :]
