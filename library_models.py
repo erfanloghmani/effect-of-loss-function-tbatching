@@ -68,9 +68,8 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.num_item_features + self.embedding_dim * 2, self.embedding_dim + 1)
-        self.weight_layer1 = nn.Linear(self.user_static_embedding_size + self.embedding_dim + self.num_item_features, 16)
-        self.weight_layer2 = nn.Linear(16, 1)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.num_item_features + self.embedding_dim * 2, self.embedding_dim + self.item_static_embedding_size + 2)
+        self.multihead_attn = nn.MultiheadAttention(self.user_static_embedding_size + self.embedding_dim, kdim=self.num_item_features, vdim=self.num_item_features, num_heads=2)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
         
@@ -104,8 +103,10 @@ class JODIE(nn.Module):
         X_out = self.weight_layer2(X_out)
         return X_out
 
-    def predict_item_embedding(self, user_embeddings):
+    def predict_item_embedding(self, user_embeddings, user_only_embeddings, item_word_embeddings, user_saw_clusters):
         X_out = self.prediction_layer(user_embeddings)
+        attn_output = self.multihead_attn(query=user_only_embeddings, key=item_word_embeddings, value=item_word_embeddings, mask=user_saw_clusters)
+        X_out = torch.cat([X_out, attn_output], dim=1)
         return X_out
 
 
