@@ -13,6 +13,7 @@ Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks.
 from library_data import *
 from library_models import *
 import json
+from sklearn.cluster import KMeans
 
 # INITIALIZE PARAMETERS
 parser = argparse.ArgumentParser()
@@ -136,8 +137,10 @@ with trange(train_end_idx) as progress_bar:
     for j in progress_bar:
         userid = user_sequence_id[j]
         itemid_previous = user_previous_itemid_sequence[j]
-        user_last_word_in_cluster[j, item_clusters[itemid_previous], :] = item_word_embs_torch[itemid_previous]
-        user_saw_cluster[j, item_clusters[itemid_prev]] = 1
+        user_last_word_in_cluster[userid, item_clusters[itemid_previous], :] = item_word_embs_torch[itemid_previous]
+        user_saw_cluster[userid, item_clusters[itemid_previous]] = 1
+
+item_word_embs_repeat = torch.tensor(item_word_embs.repeat(N_CLUSTERS, 0), dtype=torch.float).cuda()
 
 print "*** Making interaction predictions by forward pass (no t-batching) ***"
 with trange(train_end_idx, test_end_idx) as progress_bar:
@@ -155,8 +158,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             tbatch_start_time = timestamp
         itemid_previous = user_previous_itemid_sequence[j]
 
-        user_last_word_in_cluster[j, item_clusters[itemid_previous], :] = item_word_embs_torch[itemid_previous]
-        user_saw_cluster[j, item_clusters[itemid_prev]] = 1
+        user_last_word_in_cluster[userid, item_clusters[itemid_previous], :] = item_word_embs_torch[itemid_previous]
+        user_saw_cluster[userid, item_clusters[itemid_previous]] = 1
 
         # LOAD USER AND ITEM EMBEDDING
         user_embedding_input = user_embeddings[torch.cuda.LongTensor([userid])]
@@ -181,8 +184,8 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         cur_user_last_word_in_cluster = user_last_word_in_cluster[torch.cuda.LongTensor([userid])]
         cur_user_saw_cluster = user_saw_cluster[torch.cuda.LongTensor([userid])]
-        cur_full_user_repeat = torch.cat([user_embedding_input, user_embedding_static[torch.cuda.LongTensor([userid]), :]], dim=1).unsqueeze(1).repeat((1, N_CLUSTERS, 1))
-        predicted_weights = model.predict_weight(tbatch_full_user_repeat, tbatch_user_last_word_in_cluster)
+        cur_full_user_repeat = torch.cat([user_embedding_input, user_embeddings_static[torch.cuda.LongTensor([userid]), :]], dim=1).unsqueeze(1).repeat((1, N_CLUSTERS, 1))
+        predicted_weights = model.predict_weight(cur_full_user_repeat, cur_user_last_word_in_cluster)
 
         weight_dynamic = predicted_item_embedding[:, -1]
 
@@ -194,13 +197,13 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances_dyn = nn.PairwiseDistance()(predicted_item_embedding[:, :args.embedding_dim].repeat(num_items, 1), item_embeddings).squeeze(-1)
-        euclidean_distances_words = nn.PairwiseDistance()(cur_user_last_word_in_cluster.view(-1, 32).repeat(num_items, 1), item_word_embs_torch.repeat(N_CLUSTERS, 1)).squeeze(-1).view(-1, 32, num_items)
+        euclidean_distances_words = nn.PairwiseDistance()(cur_user_last_word_in_cluster.view(-1, 32).repeat(num_items, 1), item_word_embs_repeat).squeeze(-1).view(-1, num_items, 32).transpose(2, 1)
         # euclidean_distances_static = nn.PairwiseDistance()(predicted_item_embedding[:, args.embedding_dim:-1].repeat(num_items, 1), item_embeddings_static).squeeze(-1)
 
         agg_distances = torch.exp(weight_dynamic) * torch.pow(euclidean_distances_dyn, 2) + (torch.exp(predicted_weights) * torch.pow(euclidean_distances_words, 2) * cur_user_saw_cluster.unsqueeze(2)).sum(1) # + torch.pow(euclidean_distances_static, 2)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-        true_item_distance = agg_distances[itemid]
+        true_item_distance = agg_distances[0, itemid]
         euclidean_distances_smaller = (agg_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
