@@ -14,6 +14,7 @@ from library_data import *
 from library_models import *
 import json
 from itertools import compress
+from sklearn import preprocessing
 
 # INITIALIZE PARAMETERS
 parser = argparse.ArgumentParser()
@@ -56,7 +57,7 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true, item_previous_interaction, previous_item_previous_interaction] = load_network(args)
+ y_true, item_previous_interaction, previous_item_previous_interaction] = load_network(args, time_scaling=False)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
@@ -68,6 +69,12 @@ print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
 test_start_idx = int(num_interactions * (args.train_proportion + 0.1))
 test_end_idx = int(num_interactions * (args.train_proportion + 0.2))
+
+scaler_user_timediff = preprocessing.StandardScaler().fit(np.array(user_timediffs_sequence[:train_end_idx]).reshape(-1, 1))
+user_timediffs_sequence = scaler_user_timediff.transform(np.array(user_timediffs_sequence).reshape(-1, 1))[:, 0]
+
+scaler_item_timediff = preprocessing.StandardScaler().fit(np.array(item_timediffs_sequence[:train_end_idx]).reshape(-1, 1))
+item_timediffs_sequence = scaler_item_timediff.transform(np.array(item_timediffs_sequence).reshape(-1, 1))[:, 0]
 
 # SET BATCHING TIMESPAN
 '''
@@ -118,7 +125,7 @@ def sample_sequence_list(previous_interaction_idxs, k):
     return sample_sequences, idxs
 
 
-def get_explanation_predictions_for_interaction(interaction_idx, k=10):
+def get_explanation_predictions_for_interaction(interaction_idx, interaction_start, k=10):
     c_userid = user_sequence_id[interaction_idx]
     itemid = item_sequence_id[interaction_idx]
     feature = feature_sequence[interaction_idx]
@@ -128,21 +135,24 @@ def get_explanation_predictions_for_interaction(interaction_idx, k=10):
     itemid_previous = user_previous_itemid_sequence[interaction_idx]
 
     previous_interaction_idxs = []
-    for i in range(interaction_idx):
+    for i in range(interaction_start, interaction_idx):
         if user_sequence_id[i] == c_userid:
             previous_interaction_idxs.append(i)
+    first_interaction = previous_interaction_idxs[0]
+    previous_interaction_idxs = previous_interaction_idxs[1:]
     sampled_sequences, idxs = sample_sequence_list(previous_interaction_idxs, k)
     all_predictions = []
     for c, seq in enumerate(sampled_sequences):
         seq.append(interaction_idx)
-        user_embedding_input = user_embeddings[torch.cuda.LongTensor([c_userid])].detach().clone()
+#        user_embedding_input = user_embeddings[torch.cuda.LongTensor([c_userid])].detach().clone()
+        user_embedding_input = user_embeddings_timeseries[first_interaction, :].clone().detach().unsqueeze(0)
         # LOAD THE EMBEDDINGS: DYNAMIC AND STATIC
         for i, pidx in enumerate(seq):
             userid = user_sequence_id[pidx]
             itemid = item_sequence_id[pidx]
             feature = feature_sequence[pidx]
-            user_timediff = timestamp_sequence[pidx] - timestamp_sequence[seq[i - 1]] if i else timestamp_sequence[pidx]
-#             user_timediff = user_timediffs_sequence[pidx]
+#             user_timediff = timestamp_sequence[pidx] - timestamp_sequence[seq[i - 1]] if i else timestamp_sequence[pidx]
+            user_timediff = user_timediffs_sequence[pidx]
             item_timediff = item_timediffs_sequence[pidx]
             itemid_previous_p = item_sequence_id[seq[i - 1]] if i else num_items - 1
             itemid_previous = user_previous_itemid_sequence[pidx]
@@ -155,10 +165,10 @@ def get_explanation_predictions_for_interaction(interaction_idx, k=10):
             feature_tensor = Variable(torch.Tensor(feature).to(device)).unsqueeze(0)
             user_timediffs_tensor = Variable(torch.Tensor([user_timediff]).to(device)).unsqueeze(0)
             item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).to(device)).unsqueeze(0)
-            if item_previous_interaction[pidx] == -1:
-                item_embedding_input = model.initial_item_embedding.unsqueeze(0)
+            if previous_item_previous_interaction[pidx] == -1:
+                item_embedding_previous = model.initial_item_embedding.unsqueeze(0)
             else:
-                item_embedding_input = item_embeddings_timeseries[previous_item_previous_interaction[pidx], :].unsqueeze(0)
+                item_embedding_previous = item_embeddings_timeseries[previous_item_previous_interaction[pidx], :].unsqueeze(0)
 #             item_embedding_previous = item_embeddings[torch.cuda.LongTensor([itemid_previous])]
 
             # PROJECT USER EMBEDDING
@@ -171,12 +181,12 @@ def get_explanation_predictions_for_interaction(interaction_idx, k=10):
             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
 #             item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
              
-            if i == len(seq) - 1:
-                euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1).cuda(), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+#            if i == len(seq) - 1:
+#                euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1).cuda(), torch.cat([item_embeddings_static], dim=1)).squeeze(-1)
                 # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-                true_item_distance = euclidean_distances[itemid]
-                euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
-                true_item_rank = np.sum(euclidean_distances_smaller) + 1
+#                true_item_distance = euclidean_distances[itemid]
+#                euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
+#                true_item_rank = np.sum(euclidean_distances_smaller) + 1
             # SAVE EMBEDDINGS
 #             item_embeddings[itemid, :] = item_embedding_output.squeeze(0)
             user_embedding_input = user_embedding_output.clone()
@@ -250,13 +260,13 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
 
         # PREDICT ITEM EMBEDDING
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
-        my_predicted_item_embedding = torch.tensor(get_explanation_predictions_for_interaction(j, k=1)[0][-1]).cuda()
+        my_predicted_item_embedding = torch.tensor(get_explanation_predictions_for_interaction(j, j - 2000, k=1)[0][-1]).cuda()
 
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_static_input], dim=1).detach())
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings_static], dim=1)).squeeze(-1)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         true_item_distance = euclidean_distances[itemid]
@@ -269,7 +279,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             test_ranks.append(true_item_rank)
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        my_euclidean_distances = nn.PairwiseDistance()(my_predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+        my_euclidean_distances = nn.PairwiseDistance()(my_predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings_static], dim=1)).squeeze(-1)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         my_true_item_distance = my_euclidean_distances[itemid]

@@ -12,6 +12,7 @@ import json
 from library_data import *
 import library_models as lib
 from library_models import *
+from sklearn import preprocessing
 
 # INITIALIZE PARAMETERS
 parser = argparse.ArgumentParser()
@@ -38,7 +39,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, item_previous_interaction, previous_item_previous_interaction] = load_network(args, time_scaling=False)
+
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
@@ -51,6 +53,11 @@ train_end_idx = validation_start_idx = int(num_interactions * args.train_proport
 test_start_idx = int(num_interactions * (args.train_proportion + 0.1))
 test_end_idx = int(num_interactions * (args.train_proportion + 0.2))
 
+scaler_user_timediff = preprocessing.StandardScaler().fit(np.array(user_timediffs_sequence[:train_end_idx]).reshape(-1, 1))
+user_timediffs_sequence = scaler_user_timediff.transform(np.array(user_timediffs_sequence).reshape(-1, 1))[:, 0]
+
+scaler_item_timediff = preprocessing.StandardScaler().fit(np.array(item_timediffs_sequence[:train_end_idx]).reshape(-1, 1))
+item_timediffs_sequence = scaler_item_timediff.transform(np.array(item_timediffs_sequence).reshape(-1, 1))[:, 0]
 # SET BATCHING TIMESPAN
 '''
 Timespan is the frequency at which the batches are created and the JODIE model is trained.
@@ -182,7 +189,7 @@ with trange(args.epochs) as progress_bar1:
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_static[tbatch_itemids, :]], dim=1).detach())
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')

@@ -13,6 +13,7 @@ Paper: Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks.
 from library_data import *
 from library_models import *
 import json
+from sklearn import preprocessing
 
 # INITIALIZE PARAMETERS
 parser = argparse.ArgumentParser()
@@ -54,7 +55,7 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true] = load_network(args)
+ y_true, item_previous_interaction, previous_item_previous_interaction] = load_network(args, time_scaling=False)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
@@ -66,6 +67,12 @@ print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
 test_start_idx = int(num_interactions * (args.train_proportion + 0.1))
 test_end_idx = int(num_interactions * (args.train_proportion + 0.2))
+
+scaler_user_timediff = preprocessing.StandardScaler().fit(np.array(user_timediffs_sequence[:train_end_idx]).reshape(-1, 1))
+user_timediffs_sequence = scaler_user_timediff.transform(np.array(user_timediffs_sequence).reshape(-1, 1))[:, 0]
+
+scaler_item_timediff = preprocessing.StandardScaler().fit(np.array(item_timediffs_sequence[:train_end_idx]).reshape(-1, 1))
+item_timediffs_sequence = scaler_item_timediff.transform(np.array(item_timediffs_sequence).reshape(-1, 1))[:, 0]
 
 # SET BATCHING TIMESPAN
 '''
@@ -157,10 +164,10 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_static_input], dim=1).detach())
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings_static], dim=1)).squeeze(-1)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
         true_item_distance = euclidean_distances[itemid]
