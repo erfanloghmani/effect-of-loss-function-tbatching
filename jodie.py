@@ -50,7 +50,7 @@ num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
 num_features = len(feature_sequence[0])
 true_labels_ratio = len(y_true) / (1.0 + sum(y_true))  # +1 in denominator in case there are no state change labels, which will throw an error.
-print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true))
+print("*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true)))
 
 # SET TRAINING, VALIDATION, TESTING, and TBATCH BOUNDARIES
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
@@ -69,13 +69,13 @@ timespan = timestamp_sequence[-1] - timestamp_sequence[0]
 tbatch_timespan = timespan / 600
 
 # INITIALIZE MODEL AND PARAMETERS
-model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).cuda()
-weight = torch.Tensor([1, true_labels_ratio]).cuda()
+model = JODIE(args, num_features, num_users, num_items, item_word_embs.shape[1]).to(device)
+weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
 MSELoss_no_reduce = nn.MSELoss(reduction='none')
 
-N_CLUSTERS = 32
+N_CLUSTERS = 12
 km = KMeans(n_clusters=N_CLUSTERS, random_state=0).fit(item_word_embs)
 item_clusters = km.predict(item_word_embs)
 
@@ -90,9 +90,9 @@ item_embeddings = initial_item_embedding.repeat(num_items, 1)  # initialize all 
 item_embedding_static = Variable(torch.eye(num_items).to(device))  # one-hot vectors for static embeddings
 user_embedding_static = Variable(torch.eye(num_users).to(device))  # one-hot vectors for static embeddings
 
-item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).cuda()
-user_last_word_in_cluster = torch.zeros((num_users, N_CLUSTERS, item_word_embs.shape[1])).cuda()
-user_saw_cluster = torch.zeros((num_users, N_CLUSTERS)).cuda()
+item_word_embs_torch = torch.tensor(item_word_embs, dtype=torch.float).to(device)
+user_last_word_in_cluster = torch.zeros((num_users, N_CLUSTERS, item_word_embs.shape[1])).to(device)
+user_saw_cluster = torch.zeros((num_users, N_CLUSTERS)).to(device)
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
@@ -120,7 +120,7 @@ if (args.init_epoch >= 0):
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
-print "*** Training the JODIE model for %d epochs ***" % args.epochs
+print("*** Training the JODIE model for %d epochs ***" % args.epochs)
 with trange(args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
@@ -201,24 +201,33 @@ with trange(args.epochs) as progress_bar1:
                             user_embedding_input = user_embeddings[tbatch_userids, :]
                             user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
                             user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_word_embs_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
+                            user_only_embeddings = torch.cat([user_projected_embedding, user_embedding_static[tbatch_userids, :]], dim=1)
 
-                            # PREDICT NEXT ITEM EMBEDDING
-                            predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
                             tbatch_user_last_word_in_cluster = user_last_word_in_cluster[tbatch_userids]
                             tbatch_user_saw_cluster = user_saw_cluster[tbatch_userids]
                             tbatch_full_user_repeat = torch.cat([user_embedding_input, user_embedding_static[tbatch_userids, :]], dim=1).unsqueeze(1).repeat((1, N_CLUSTERS, 1))
-                            predicted_weights = model.predict_weight(tbatch_full_user_repeat, tbatch_user_last_word_in_cluster)
+
+                            # PREDICT NEXT ITEM EMBEDDING
+                            predicted_item_embedding = model.predict_item_embedding(
+                                user_item_embedding, 
+                                user_only_embeddings=user_only_embeddings,
+                                item_word_embeddings=tbatch_user_last_word_in_cluster,
+                                user_saw_clusters=tbatch_user_saw_cluster
+                            )
 
                             weight_dynamic = predicted_item_embedding[:, -(item_word_embs.shape[1] + 2)]
                             weight_word = predicted_item_embedding[:, -(item_word_embs.shape[1] + 1)]
 
+                            print(predicted_item_embedding.shape)
+                            print(args.embedding_dim, item_word_embs.shape)
+                            print(predicted_item_embedding[:, args.embedding_dim:-(item_word_embs.shape[1] + 2)].shape)
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
                             # print(weight_dynamic.shape, predicted_item_embedding[:, :args.embedding_dim].shape, item_embedding_input.detach().shape) 
                             loss += torch.sum(torch.exp(weight_dynamic) * MSELoss_no_reduce(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach()).sum(1))
                             loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, args.embedding_dim:-(item_word_embs.shape[1] + 2)], item_embedding_static[tbatch_itemids, :]).sum(1))
-                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, -item_word_embs.shape[1]:], item_word_embs_input.unsqueeze(1).repeat((1, N_CLUSTERS, 1))).sum(2) * torch.exp(predicted_weights).squeeze(2))
+                            loss += torch.sum(MSELoss_no_reduce(predicted_item_embedding[:, -item_word_embs.shape[1]:], item_word_embs_input.unsqueeze(1)).sum(2) * torch.exp(weight_word))
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor_full, select='user_update')
@@ -256,7 +265,7 @@ with trange(args.epochs) as progress_bar1:
                     tbatch_to_insert = -1
 
         # END OF ONE EPOCH
-        print "\n\nTotal loss in this epoch = %f" % (total_loss)
+        print("\n\nTotal loss in this epoch = %f" % (total_loss))
         item_embeddings_dystat = torch.cat([item_embeddings, item_embedding_static], dim=1)
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
@@ -270,6 +279,6 @@ with trange(args.epochs) as progress_bar1:
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
 
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
-print "\n\n*** Training complete. Saving final model. ***\n\n"
+print("\n\n*** Training complete. Saving final model. ***\n\n")
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
 json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))

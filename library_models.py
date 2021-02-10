@@ -15,7 +15,7 @@ import math, random
 import sys
 from collections import defaultdict
 import os
-import cPickle
+# import cPickle
 import gpustat
 from itertools import chain
 from tqdm import tqdm, trange, tqdm_notebook, tnrange
@@ -46,7 +46,7 @@ class JODIE(nn.Module):
     def __init__(self, args, num_features, num_users, num_items, num_item_features):
         super(JODIE,self).__init__()
 
-        print "*** Initializing the JODIE model ***"
+        print("*** Initializing the JODIE model ***")
         self.modelname = args.model
         self.embedding_dim = args.embedding_dim
         self.num_users = num_users
@@ -55,23 +55,24 @@ class JODIE(nn.Module):
         self.user_static_embedding_size = num_users
         self.item_static_embedding_size = num_items
 
-        print "Initializing user and item embeddings"
+        print("Initializing user and item embeddings")
         self.initial_user_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
         self.initial_item_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
 
         rnn_input_size_items = rnn_input_size_users = self.embedding_dim + 1 + num_features + num_item_features
 
-        print "Initializing user and item RNNs"
+        print("Initializing user and item RNNs")
         self.item_rnn = nn.RNNCell(rnn_input_size_users, self.embedding_dim)
         self.user_rnn = nn.RNNCell(rnn_input_size_items, self.embedding_dim)
 
-        print "Initializing linear layers"
+        print("Initializing linear layers")
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
         self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.num_item_features + self.embedding_dim * 2, self.embedding_dim + self.item_static_embedding_size + 2)
-        self.multihead_attn = nn.MultiheadAttention(self.user_static_embedding_size + self.embedding_dim, kdim=self.num_item_features, vdim=self.num_item_features, num_heads=2)
+        self.attn_transfrom = nn.Linear(self.user_static_embedding_size + self.embedding_dim, self.num_item_features)
+        self.multihead_attn = nn.MultiheadAttention(self.num_item_features, num_heads=1)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
-        print "*** JODIE initialization complete ***\n\n"
+        print("*** JODIE initialization complete ***\n\n")
         
     def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None):
         if select == 'item_update':
@@ -105,8 +106,12 @@ class JODIE(nn.Module):
 
     def predict_item_embedding(self, user_embeddings, user_only_embeddings, item_word_embeddings, user_saw_clusters):
         X_out = self.prediction_layer(user_embeddings)
-        attn_output = self.multihead_attn(query=user_only_embeddings, key=item_word_embeddings, value=item_word_embeddings, mask=user_saw_clusters)
-        X_out = torch.cat([X_out, attn_output], dim=1)
+        attn_input = item_word_embeddings.transpose(0, 1)
+        attn_query = self.attn_transfrom(user_only_embeddings)
+        print(attn_query.shape, item_word_embeddings.shape, user_saw_clusters.shape)
+        attn_output, _ = self.multihead_attn(query=attn_query.unsqueeze(0), key=attn_input, value=attn_input, attn_mask=user_saw_clusters.unsqueeze(1))
+        print(attn_output.shape)
+        X_out = torch.cat([X_out, attn_output.squeeze(0)], dim=1)
         return X_out
 
 
@@ -150,7 +155,7 @@ def calculate_state_prediction_loss(model, tbatch_interactionids, user_embedding
 
 # SAVE TRAINED MODEL TO DISK
 def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, train_end_idx, user_embeddings_time_series=None, item_embeddings_time_series=None, path=PATH):
-    print "*** Saving embeddings and model ***"
+    print("*** Saving embeddings and model ***")
     state = {
             'user_embeddings': user_embeddings.data.cpu().numpy(),
             'item_embeddings': item_embeddings.data.cpu().numpy(),
@@ -170,7 +175,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 
     filename = os.path.join(directory, "checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
     torch.save(state, filename)
-    print "*** Saved embeddings and model to file: %s ***\n\n" % filename
+    print("*** Saved embeddings and model to file: %s ***\n\n" % filename)
 
 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
@@ -178,7 +183,7 @@ def load_model(model, optimizer, args, epoch, device):
     modelname = args.model
     filename = PATH + "saved_models/%s/checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
-    print "Loading saved embeddings and model: %s" % filename
+    print("Loading saved embeddings and model: %s" % filename)
     args.start_epoch = checkpoint['epoch']
     user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).to(device))
     item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).to(device))
