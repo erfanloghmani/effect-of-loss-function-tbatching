@@ -72,7 +72,7 @@ model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
-CELoss = nn.CrossEntropyLoss()
+CELoss = nn.CrossEntropyLoss(reduction='sum')
 
 # INITIALIZE EMBEDDING
 initial_user_embedding = nn.Parameter(F.normalize(torch.rand(args.embedding_dim).to(device), dim=0))  # the initial user and item embeddings are learned during training as well
@@ -93,7 +93,7 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 all_total_losses = []
 
 if (args.init_epoch >= 0):
-    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch)
+    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch, device)
     set_embeddings_training_end(user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, user_sequence_id, item_sequence_id, train_end_idx)
 
     # LOAD THE EMBEDDINGS: DYNAMIC AND STATIC
@@ -112,7 +112,7 @@ if (args.init_epoch >= 0):
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
 print "*** Training the JODIE model for %d epochs ***" % args.epochs
-with trange(args.epochs) as progress_bar1:
+with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
 

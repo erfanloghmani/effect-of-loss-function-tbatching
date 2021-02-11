@@ -87,7 +87,7 @@ model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
-CELoss = nn.CrossEntropyLoss()
+CELoss = nn.CrossEntropyLoss(reduction='sum')
 
 # INITIALIZE MODEL
 learning_rate = 1e-3
