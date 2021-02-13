@@ -67,7 +67,7 @@ class JODIE(nn.Module):
         print "Initializing linear layers"
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print "*** JODIE initialization complete ***\n\n"
         

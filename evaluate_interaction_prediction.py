@@ -163,15 +163,14 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
         # CALCULATE PREDICTION LOSS
-        # loss += MSELoss(predicted_item_embedding[:, :args.embedding_dim], item_embedding_input.detach())
-        loss += CELoss(predicted_item_embedding, item_embedding_static_input.argmax(1))
+        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
-        # euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
+        euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
 
         # CALCULATE RANK OF THE TRUE ITEM AMONG ALL ITEMS
-        true_item_distance = predicted_item_embedding[0, itemid]
-        euclidean_distances_smaller = (predicted_item_embedding > true_item_distance).data.cpu().numpy()
+        true_item_distance = euclidean_distances[itemid]
+        euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
         if j < test_start_idx:
