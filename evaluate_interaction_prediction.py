@@ -20,6 +20,7 @@ parser.add_argument('--network', required=True, help='Network name')
 parser.add_argument('--model', default='jodie', help="Model name")
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epoch', default=50, type=int, help='Epoch id to load')
+parser.add_argument('--run', default=0, type=int, help='Current run')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Proportion of training interactions')
 parser.add_argument("--state_change", default=False, action="store_true", help="True if training with state change of users along with interaction prediction. False otherwise. By default, set to True.")
@@ -43,7 +44,7 @@ else:
     device = torch.device('cpu')
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/interaction_prediction_%s_%s.txt" % (args.model, args.network)
+output_fname = "results/interaction_prediction_%s_%s_%s.txt" % (args.model, args.network, args.run)
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
@@ -87,6 +88,7 @@ model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+# MSELoss_sum = nn.MSELoss(reduction='sum')
 CELoss = nn.CrossEntropyLoss()
 
 # INITIALIZE MODEL
@@ -128,6 +130,7 @@ Please note that since each interaction in validation and test is only seen once
 '''
 tbatch_start_time = None
 loss = 0
+edge_ranks = defaultdict(list)
 # FORWARD PASS
 print "*** Making interaction predictions by forward pass (no t-batching) ***"
 with trange(train_end_idx, test_end_idx) as progress_bar:
@@ -172,6 +175,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         true_item_distance = euclidean_distances[itemid]
         euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
+        edge_ranks[str((userid, itemid))].append(true_item_rank)
 
         if j < test_start_idx:
             validation_ranks.append(true_item_rank)
@@ -199,9 +203,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # UPDATE THE MODEL IN REAL-TIME USING ERRORS MADE IN THE PAST PREDICTION
         if timestamp - tbatch_start_time > tbatch_timespan:
             tbatch_start_time = timestamp
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+            # loss.backward()
+            # optimizer.step()
+            # optimizer.zero_grad()
 
             # RESET LOSS FOR NEXT T-BATCH
             loss = 0
@@ -211,8 +215,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             user_embeddings_timeseries.detach_()
 
 
-json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
-json.dump(test_ranks, open('results/test_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
+json.dump(edge_ranks, open('results/edge_ranks_%s_%s_%s_%s.json' % (args.epoch, args.run, args.model, args.network), 'w'))
+json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s_%s.json' % (args.epoch, args.run, args.model, args.network), 'w'))
+json.dump(test_ranks, open('results/test_ranks_%s_%s_%s_%s.json' % (args.epoch, args.run, args.model, args.network), 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks

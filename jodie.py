@@ -19,6 +19,7 @@ parser.add_argument('--network', required=True, help='Name of the network/datase
 parser.add_argument('--model', default="jodie", help='Model name to save output in file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epochs', default=50, type=int, help='Number of epochs to train the model')
+parser.add_argument('--run', default=0, type=int, help='Current run')
 parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions of the dynamic embedding')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Fraction of interactions (from the beginning) that are used for training.The next 10% are used for validation and the next 10% for testing')
@@ -65,13 +66,14 @@ Longer timespans mean more interactions are processed and the training time is r
 Longer timespan leads to less frequent model updates.
 '''
 timespan = timestamp_sequence[-1] - timestamp_sequence[0]
-tbatch_timespan = timespan / 500
+tbatch_timespan = timespan / 100
 
 # INITIALIZE MODEL AND PARAMETERS
 model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELoss_sum = nn.MSELoss(reduction='sum')
 CELoss = nn.CrossEntropyLoss()
 
 # INITIALIZE EMBEDDING
@@ -115,6 +117,8 @@ print "*** Training the JODIE model for %d epochs ***" % args.epochs
 with trange(args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
+
+        edge_len_tbatches = defaultdict(list)
 
         # INITIALIZE EMBEDDING TRAJECTORY STORAGE
         user_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).to(device))
@@ -164,6 +168,11 @@ with trange(args.epochs) as progress_bar1:
                     # ITERATE OVER ALL T-BATCHES
                     with trange(len(lib.current_tbatches_user)) as progress_bar3:
                         for i in progress_bar3:
+
+                            for xidx in range(len(lib.current_tbatches_user[i])):
+                                userid = lib.current_tbatches_user[i][xidx]
+                                itemid = lib.current_tbatches_item[i][xidx]
+                                edge_len_tbatches[str((userid, itemid))].append(len(lib.current_tbatches_user[i]))
                             progress_bar3.set_description('Processed %d of %d T-batches ' % (i, len(lib.current_tbatches_user)))
 
                             total_interaction_count += len(lib.current_tbatches_interactionids[i])
@@ -232,6 +241,8 @@ with trange(args.epochs) as progress_bar1:
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
         all_total_losses.append(total_loss)
+
+        json.dump(edge_len_tbatches, open('results/jodie_%s_%s_%s_%s_tbatch_len.json' % (args.network, args.run, args.model, ep), 'w'))
         json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
 
         user_embeddings = initial_user_embedding.repeat(num_users, 1)
