@@ -87,6 +87,7 @@ model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELoss_sum = nn.MSELoss(reduction='sum')
 CELoss = nn.CrossEntropyLoss()
 
 # INITIALIZE MODEL
@@ -163,7 +164,7 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        loss += MSELoss_sum(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)

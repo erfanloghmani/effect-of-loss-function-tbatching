@@ -72,6 +72,7 @@ model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELoss_sum = nn.MSELoss(reduction='sum')
 CELoss = nn.CrossEntropyLoss()
 
 # INITIALIZE EMBEDDING
@@ -188,7 +189,7 @@ with trange(args.epochs) as progress_bar1:
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += predicted_item_embedding.shape[0] * MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            loss += MSELoss_sum(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
 
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
