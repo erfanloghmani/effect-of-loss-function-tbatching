@@ -29,7 +29,7 @@ args.datapath = "data/%s.csv" % args.network
 if args.train_proportion > 0.8:
     sys.exit('Training sequence proportion cannot be greater than 0.8.')
 if args.network == "mooc":
-    print "No interaction prediction for %s" % args.network
+    print("No interaction prediction for %s" % args.network)
     sys.exit(0)
 
 if args.device == 'gpu':
@@ -50,7 +50,7 @@ if os.path.exists(output_fname):
     for line in f:
         line = line.strip()
         if search_string in line:
-            print "Output file already has results of epoch %d" % args.epoch
+            print("Output file already has results of epoch %d" % args.epoch)
             sys.exit(0)
     f.close()
 
@@ -59,13 +59,13 @@ if os.path.exists(output_fname):
  item2id, item_sequence_id, item_timediffs_sequence,
  timestamp_sequence,
  feature_sequence,
- y_true] = load_network(args)
+ y_true, user_previous_itemids_sequence, user_previous_timestamp_sequence] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_features = len(feature_sequence[0])
 num_users = len(user2id)
 num_items = len(item2id) + 1
 true_labels_ratio = len(y_true) / (sum(y_true) + 1)
-print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true))
+print("*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true)))
 
 # SET TRAIN, VALIDATION, AND TEST BOUNDARIES
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
@@ -129,7 +129,7 @@ Please note that since each interaction in validation and test is only seen once
 tbatch_start_time = None
 loss = 0
 # FORWARD PASS
-print "*** Making interaction predictions by forward pass (no t-batching) ***"
+print("*** Making interaction predictions by forward pass (no t-batching) ***")
 with trange(train_end_idx, test_end_idx) as progress_bar:
     for j in progress_bar:
         progress_bar.set_description('%dth interaction for validation and testing' % j)
@@ -155,8 +155,15 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         item_timediffs_tensor = Variable(torch.Tensor([item_timediff]).to(device)).unsqueeze(0)
         item_embedding_previous = item_embeddings[torch.LongTensor([itemid_previous]).to(device)]
 
+        itemids_history_previous = torch.LongTensor(user_previous_itemids_sequence[j]).to(device)
+        previous_timestamps_tensor = torch.Tensor(user_previous_timestamp_sequence[j]).to(device).unsqueeze(0)
+        timestamps_tensor = torch.Tensor([timestamp]).to(device)
+        item_embeddings_history_previous = item_embeddings[itemids_history_previous, :].unsqueeze(0)
+
+        # print(itemids_history_previous.shape, previous_timestamps_tensor.shape, timestamps_tensor.shape, item_embeddings_history_previous.shape)
+
         # PROJECT USER EMBEDDING
-        user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
+        user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, previous_items_embs=item_embeddings_history_previous, timestamps_tensor=timestamps_tensor, previous_timestamps=previous_timestamps_tensor, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
         user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embeddings_static[torch.LongTensor([itemid_previous]).to(device)], user_embedding_static_input], dim=1)
 
         # PREDICT ITEM EMBEDDING
@@ -174,9 +181,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
 
         if j < test_start_idx:
-            validation_ranks.append(true_item_rank)
+            validation_ranks.append(int(true_item_rank))
         else:
-            test_ranks.append(true_item_rank)
+            test_ranks.append(int(true_item_rank))
 
         # UPDATE USER AND ITEM EMBEDDING
         user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
@@ -229,15 +236,15 @@ performance_dict['test'] = [mrr, rec10]
 fw = open(output_fname, "a")
 metrics = ['Mean Reciprocal Rank', 'Recall@10']
 
-print '\n\n*** Validation performance of epoch %d ***' % args.epoch
+print('\n\n*** Validation performance of epoch %d ***' % args.epoch)
 fw.write('\n\n*** Validation performance of epoch %d ***\n' % args.epoch)
-for i in xrange(len(metrics)):
+for i in range(len(metrics)):
     print(metrics[i] + ': ' + str(performance_dict['validation'][i]))
     fw.write("Validation: " + metrics[i] + ': ' + str(performance_dict['validation'][i]) + "\n")
 
-print '\n\n*** Test performance of epoch %d ***' % args.epoch
+print('\n\n*** Test performance of epoch %d ***' % args.epoch)
 fw.write('\n\n*** Test performance of epoch %d ***\n' % args.epoch)
-for i in xrange(len(metrics)):
+for i in range(len(metrics)):
     print(metrics[i] + ': ' + str(performance_dict['test'][i]))
     fw.write("Test: " + metrics[i] + ': ' + str(performance_dict['test'][i]) + "\n")
 
