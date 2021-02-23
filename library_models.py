@@ -49,6 +49,7 @@ class JODIE(nn.Module):
         super(JODIE,self).__init__()
 
         print("*** Initializing the JODIE model ***")
+        self.time_dim = 8
         self.modelname = args.model
         self.embedding_dim = args.embedding_dim
         self.num_users = num_users
@@ -67,15 +68,16 @@ class JODIE(nn.Module):
         self.user_rnn = nn.RNNCell(rnn_input_size_items, self.embedding_dim)
 
         print("Initializing linear layers")
-        self.time_encoder = TimeEncode(dimension=8)
+        self.time_encoder = TimeEncode(dimension=self.time_dim)
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
-        self.attn_layer = nn.MultiheadAttention(self.embedding_dim, num_heads=1)
+        self.attn_layer = nn.MultiheadAttention(self.embedding_dim + self.time_dim, num_heads=1)
+        self.linear_fix_size = nn.Linear(self.embedding_dim + self.time_dim, self.embedding_dim)
         self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print("*** JODIE initialization complete ***\n\n")
         
-    def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None, previous_items_embs=None):
+    def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None, previous_items_embs=None, timestamps_tensor=None, previous_timestamps=None):
         if select == 'item_update':
             input1 = torch.cat([user_embeddings, timediffs, features], dim=1)
             item_embedding_output = self.item_rnn(input1, item_embeddings)
@@ -87,7 +89,7 @@ class JODIE(nn.Module):
             return F.normalize(user_embedding_output)
 
         elif select == 'project':
-            user_projected_embedding = self.context_convert_attn(user_embeddings, timediffs, features, previous_items_embs)
+            user_projected_embedding = self.context_convert_attn(user_embeddings, timediffs, features, previous_items_embs, timestamps_tensor, previous_timestamps)
             #user_projected_embedding = torch.cat([input3, item_embeddings], dim=1)
             return user_projected_embedding
 
@@ -95,10 +97,13 @@ class JODIE(nn.Module):
         new_embeddings = embeddings * (1 + self.embedding_layer(timediffs))
         return new_embeddings
 
-    def context_convert_attn(self, embeddings, timediffs, features, previous_items_embs):
-        # print(embeddings.shape, previous_items_embs)
-        new_embeddings, _ = self.attn_layer(embeddings.unsqueeze(0), key=previous_items_embs, value=previous_items_embs)
-        return new_embeddings.squeeze(0)
+    def context_convert_attn(self, embeddings, timediffs, features, previous_items_embs, timestamps_tensor, previous_timestamps_tensor):
+        timestamps_cat = torch.cat([timestamps_tensor.unsqueeze(1), previous_timestamps_tensor], dim=1)
+        time_enc = self.time_encoder(timestamps_cat)
+        embeddings_query = torch.cat([embeddings, time_enc[:, 0, :]], dim=1)
+        embeddings_key = torch.cat([previous_items_embs, time_enc[:, 1:, :]], dim=2)
+        new_embeddings, _ = self.attn_layer(embeddings_query.unsqueeze(0), key=embeddings_key, value=embeddings_key)
+        return self.linear_fix_size(new_embeddings.squeeze(0))
 
     def predict_label(self, user_embeddings):
         X_out = nn.ReLU()(self.linear_layer1(user_embeddings))
@@ -112,7 +117,7 @@ class JODIE(nn.Module):
 
 # INITIALIZE T-BATCH VARIABLES
 def reinitialize_tbatches():
-    global current_tbatches_interactionids, current_tbatches_user, current_tbatches_item, current_tbatches_timestamp, current_tbatches_feature, current_tbatches_label, current_tbatches_previous_item, current_tbatches_previous_items
+    global current_tbatches_interactionids, current_tbatches_user, current_tbatches_item, current_tbatches_timestamp, current_tbatches_feature, current_tbatches_label, current_tbatches_previous_item, current_tbatches_previous_items, current_tbatches_previous_timestamps
     global tbatchid_user, tbatchid_item, current_tbatches_user_timediffs, current_tbatches_item_timediffs, current_tbatches_user_timediffs_next
 
     # list of users of each tbatch up to now
@@ -127,6 +132,7 @@ def reinitialize_tbatches():
     current_tbatches_user_timediffs = defaultdict(list)
     current_tbatches_item_timediffs = defaultdict(list)
     current_tbatches_user_timediffs_next = defaultdict(list)
+    current_tbatches_previous_timestamps = defaultdict(list)
 
     # the latest tbatch a user is in
     tbatchid_user = defaultdict(lambda: -1)

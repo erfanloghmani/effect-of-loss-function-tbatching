@@ -43,7 +43,7 @@ else:
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true, user_previous_itemids_sequence] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, user_previous_itemids_sequence, user_previous_timestamp_sequence] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
@@ -139,6 +139,7 @@ with trange(args.epochs) as progress_bar1:
                 feature = feature_sequence[j]
                 user_timediff = user_timediffs_sequence[j]
                 item_timediff = item_timediffs_sequence[j]
+                timestamp = timestamp_sequence[j]
 
                 # CREATE T-BATCHES: ADD INTERACTION J TO THE CORRECT T-BATCH
                 tbatch_to_insert = max(lib.tbatchid_user[userid], lib.tbatchid_item[itemid]) + 1
@@ -147,12 +148,14 @@ with trange(args.epochs) as progress_bar1:
 
                 lib.current_tbatches_user[tbatch_to_insert].append(userid)
                 lib.current_tbatches_item[tbatch_to_insert].append(itemid)
+                lib.current_tbatches_timestamp[tbatch_to_insert].append(timestamp)
                 lib.current_tbatches_feature[tbatch_to_insert].append(feature)
                 lib.current_tbatches_interactionids[tbatch_to_insert].append(j)
                 lib.current_tbatches_user_timediffs[tbatch_to_insert].append(user_timediff)
                 lib.current_tbatches_item_timediffs[tbatch_to_insert].append(item_timediff)
                 lib.current_tbatches_previous_item[tbatch_to_insert].append(user_previous_itemid_sequence[j])
                 lib.current_tbatches_previous_items[tbatch_to_insert].append(user_previous_itemids_sequence[j])
+                lib.current_tbatches_previous_timestamps[tbatch_to_insert].append(user_previous_timestamp_sequence[j])
 
                 timestamp = timestamp_sequence[j]
                 if tbatch_start_time is None:
@@ -178,6 +181,8 @@ with trange(args.epochs) as progress_bar1:
                             item_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_item_timediffs[i]).to(device)).unsqueeze(1)
                             tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).to(device)
                             tbatch_itemids_history_previous = torch.LongTensor(lib.current_tbatches_previous_items[i]).to(device)
+                            previous_timestamps_tensor = torch.Tensor(lib.current_tbatches_previous_timestamps[i]).to(device)
+                            timestamps_tensor = torch.Tensor(lib.current_tbatches_timestamp[i]).to(device)
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
                             item_embeddings_history_previous = item_embeddings[tbatch_itemids_history_previous, :]
                             # print(tbatch_itemids_history_previous)
@@ -185,7 +190,7 @@ with trange(args.epochs) as progress_bar1:
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
                             user_embedding_input = user_embeddings[tbatch_userids, :]
-                            user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, previous_items_embs=item_embeddings_history_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
+                            user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timestamps_tensor=timestamps_tensor, previous_timestamps=previous_timestamps_tensor, previous_items_embs=item_embeddings_history_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
                             user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING

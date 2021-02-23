@@ -81,14 +81,19 @@ def load_network(args, time_scaling=True, n_history=10):
     user_current_timestamp = defaultdict(float)
     user_previous_itemid_sequence = []
     user_previous_itemids_sequence = []
+    user_previous_timestamp_sequence = []
     user_latest_itemid = defaultdict(lambda: num_items)
     user_latest_itemids = defaultdict(lambda: [num_items for i in range(n_history)])
+    user_latest_timestamps = defaultdict(lambda: [0 for i in range(n_history)])
     for cnt, user in enumerate(user_sequence):
         if user not in user2id:
             user2id[user] = nodeid
             nodeid += 1
         timestamp = timestamp_sequence[cnt]
         user_timedifference_sequence.append(timestamp - user_current_timestamp[user])
+        user_previous_timestamp_sequence.append(list(user_latest_timestamps[user]))
+        user_latest_timestamps[user][:-1] = user_latest_timestamps[user][1:]
+        user_latest_timestamps[user][-1] = timestamp
         user_current_timestamp[user] = timestamp
         user_previous_itemid_sequence.append(user_latest_itemid[user])
         user_previous_itemids_sequence.append(list(user_latest_itemids[user]))
@@ -108,5 +113,5 @@ def load_network(args, time_scaling=True, n_history=10):
         item2id, item_sequence_id, item_timedifference_sequence, \
         timestamp_sequence, \
         feature_sequence, \
-        y_true_labels, user_previous_itemids_sequence]
+        y_true_labels, user_previous_itemids_sequence, user_previous_timestamp_sequence]
 
