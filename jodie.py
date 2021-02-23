@@ -43,13 +43,13 @@ else:
 # LOAD DATA
 [user2id, user_sequence_id, user_timediffs_sequence, user_previous_itemid_sequence,
  item2id, item_sequence_id, item_timediffs_sequence,
- timestamp_sequence, feature_sequence, y_true] = load_network(args)
+ timestamp_sequence, feature_sequence, y_true, user_previous_itemids_sequence] = load_network(args)
 num_interactions = len(user_sequence_id)
 num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
 num_features = len(feature_sequence[0])
 true_labels_ratio = len(y_true) / (1.0 + sum(y_true))  # +1 in denominator in case there are no state change labels, which will throw an error.
-print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true))
+print("*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true)))
 
 # SET TRAINING, VALIDATION, TESTING, and TBATCH BOUNDARIES
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
@@ -111,7 +111,7 @@ if (args.init_epoch >= 0):
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
-print "*** Training the JODIE model for %d epochs ***" % args.epochs
+print("*** Training the JODIE model for %d epochs ***" % args.epochs)
 with trange(args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
@@ -152,6 +152,7 @@ with trange(args.epochs) as progress_bar1:
                 lib.current_tbatches_user_timediffs[tbatch_to_insert].append(user_timediff)
                 lib.current_tbatches_item_timediffs[tbatch_to_insert].append(item_timediff)
                 lib.current_tbatches_previous_item[tbatch_to_insert].append(user_previous_itemid_sequence[j])
+                lib.current_tbatches_previous_items[tbatch_to_insert].append(user_previous_itemids_sequence[j])
 
                 timestamp = timestamp_sequence[j]
                 if tbatch_start_time is None:
@@ -176,11 +177,15 @@ with trange(args.epochs) as progress_bar1:
                             user_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_user_timediffs[i]).to(device)).unsqueeze(1)
                             item_timediffs_tensor = Variable(torch.Tensor(lib.current_tbatches_item_timediffs[i]).to(device)).unsqueeze(1)
                             tbatch_itemids_previous = torch.LongTensor(lib.current_tbatches_previous_item[i]).to(device)
+                            tbatch_itemids_history_previous = torch.LongTensor(lib.current_tbatches_previous_items[i]).to(device)
                             item_embedding_previous = item_embeddings[tbatch_itemids_previous, :]
+                            item_embeddings_history_previous = item_embeddings[tbatch_itemids_history_previous, :]
+                            # print(tbatch_itemids_history_previous)
+                            # print(item_embeddings_history_previous.shape, tbatch_itemids_history_previous.shape)
 
                             # PROJECT USER EMBEDDING TO CURRENT TIME
                             user_embedding_input = user_embeddings[tbatch_userids, :]
-                            user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
+                            user_projected_embedding = model.forward(user_embedding_input, item_embedding_previous, previous_items_embs=item_embeddings_history_previous, timediffs=user_timediffs_tensor, features=feature_tensor, select='project')
                             user_item_embedding = torch.cat([user_projected_embedding, item_embedding_previous, item_embedding_static[tbatch_itemids_previous, :], user_embedding_static[tbatch_userids, :]], dim=1)
 
                             # PREDICT NEXT ITEM EMBEDDING
@@ -226,7 +231,7 @@ with trange(args.epochs) as progress_bar1:
                     tbatch_to_insert = -1
 
         # END OF ONE EPOCH
-        print "\n\nTotal loss in this epoch = %f" % (total_loss)
+        print("\n\nTotal loss in this epoch = %f" % (total_loss))
         item_embeddings_dystat = torch.cat([item_embeddings, item_embedding_static], dim=1)
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
@@ -238,6 +243,6 @@ with trange(args.epochs) as progress_bar1:
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
 
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
-print "\n\n*** Training complete. Saving final model. ***\n\n"
+print("\n\n*** Training complete. Saving final model. ***\n\n")
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
 json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))

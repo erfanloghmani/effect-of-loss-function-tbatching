@@ -12,12 +12,12 @@ import operator
 import copy
 from collections import defaultdict
 import os, re
-import cPickle
+# import cPickle
 import argparse
 from sklearn.preprocessing import scale
 
 # LOAD THE NETWORK
-def load_network(args, time_scaling=True):
+def load_network(args, time_scaling=True, n_history=10):
     '''
     This function loads the input network.
 
@@ -40,7 +40,7 @@ def load_network(args, time_scaling=True):
     start_timestamp = None
     y_true_labels = []
 
-    print "\n\n**** Loading %s network from file: %s ****" % (network, datapath)
+    print("\n\n**** Loading %s network from file: %s ****" % (network, datapath))
     f = open(datapath,"r")
     f.readline()
     for cnt, l in enumerate(f):
@@ -52,14 +52,14 @@ def load_network(args, time_scaling=True):
             start_timestamp = float(ls[2])
         timestamp_sequence.append(float(ls[2]) - start_timestamp) 
         y_true_labels.append(int(ls[3])) # label = 1 at state change, 0 otherwise
-        feature_sequence.append(map(float,ls[4:]))
+        feature_sequence.append(list(map(float,ls[4:])))
     f.close()
 
     user_sequence = np.array(user_sequence) 
     item_sequence = np.array(item_sequence)
     timestamp_sequence = np.array(timestamp_sequence)
 
-    print "Formating item sequence"
+    print("Formating item sequence")
     nodeid = 0
     item2id = {}
     item_timedifference_sequence = []
@@ -74,13 +74,15 @@ def load_network(args, time_scaling=True):
     num_items = len(item2id)
     item_sequence_id = [item2id[item] for item in item_sequence]
 
-    print "Formating user sequence"
+    print("Formating user sequence")
     nodeid = 0
     user2id = {}
     user_timedifference_sequence = []
     user_current_timestamp = defaultdict(float)
     user_previous_itemid_sequence = []
+    user_previous_itemids_sequence = []
     user_latest_itemid = defaultdict(lambda: num_items)
+    user_latest_itemids = defaultdict(lambda: [num_items for i in range(n_history)])
     for cnt, user in enumerate(user_sequence):
         if user not in user2id:
             user2id[user] = nodeid
@@ -89,19 +91,22 @@ def load_network(args, time_scaling=True):
         user_timedifference_sequence.append(timestamp - user_current_timestamp[user])
         user_current_timestamp[user] = timestamp
         user_previous_itemid_sequence.append(user_latest_itemid[user])
+        user_previous_itemids_sequence.append(list(user_latest_itemids[user]))
         user_latest_itemid[user] = item2id[item_sequence[cnt]]
+        user_latest_itemids[user][:-1] = user_latest_itemids[user][1:]
+        user_latest_itemids[user][-1] = item2id[item_sequence[cnt]]
     num_users = len(user2id)
     user_sequence_id = [user2id[user] for user in user_sequence]
 
     if time_scaling:
-        print "Scaling timestamps"
+        print("Scaling timestamps")
         user_timedifference_sequence = scale(np.array(user_timedifference_sequence) + 1)
         item_timedifference_sequence = scale(np.array(item_timedifference_sequence) + 1)
 
-    print "*** Network loading completed ***\n\n"
+    print("*** Network loading completed ***\n\n")
     return [user2id, user_sequence_id, user_timedifference_sequence, user_previous_itemid_sequence, \
         item2id, item_sequence_id, item_timedifference_sequence, \
         timestamp_sequence, \
         feature_sequence, \
-        y_true_labels]
+        y_true_labels, user_previous_itemids_sequence]
 

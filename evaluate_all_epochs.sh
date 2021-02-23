@@ -17,11 +17,11 @@ gpu=$3
 idx=${4-0}
 interaction="interaction"
 
-while [ $idx -le 5 ]
+while [ $idx -le 9 ]
 do
     echo $idx
     if [ $type == "$interaction" ]; then
-	python2.7 evaluate_interaction_prediction.py --network $network --model jodie-ce --epoch ${idx} --device cpu
+	python2.7 evaluate_interaction_prediction.py --network $network --model jodie-mult --epoch ${idx} --device cpu
     else
 	python2.7 evaluate_state_change_prediction.py --network $network --model jodie --epoch ${idx} --gpu ${gpu}
     fi

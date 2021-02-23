@@ -15,11 +15,13 @@ import math, random
 import sys
 from collections import defaultdict
 import os
-import cPickle
+# import cPickle
 import gpustat
 from itertools import chain
 from tqdm import tqdm, trange, tqdm_notebook, tnrange
 import csv
+
+from time_encoding import TimeEncode
 
 PATH = "./"
 
@@ -46,7 +48,7 @@ class JODIE(nn.Module):
     def __init__(self, args, num_features, num_users, num_items):
         super(JODIE,self).__init__()
 
-        print "*** Initializing the JODIE model ***"
+        print("*** Initializing the JODIE model ***")
         self.modelname = args.model
         self.embedding_dim = args.embedding_dim
         self.num_users = num_users
@@ -54,24 +56,26 @@ class JODIE(nn.Module):
         self.user_static_embedding_size = num_users
         self.item_static_embedding_size = num_items
 
-        print "Initializing user and item embeddings"
+        print("Initializing user and item embeddings")
         self.initial_user_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
         self.initial_item_embedding = nn.Parameter(torch.Tensor(args.embedding_dim))
 
         rnn_input_size_items = rnn_input_size_users = self.embedding_dim + 1 + num_features
 
-        print "Initializing user and item RNNs"
+        print("Initializing user and item RNNs")
         self.item_rnn = nn.RNNCell(rnn_input_size_users, self.embedding_dim)
         self.user_rnn = nn.RNNCell(rnn_input_size_items, self.embedding_dim)
 
-        print "Initializing linear layers"
+        print("Initializing linear layers")
+        self.time_encoder = TimeEncode(dimension=8)
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
+        self.attn_layer = nn.MultiheadAttention(self.embedding_dim, num_heads=1)
         self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
-        print "*** JODIE initialization complete ***\n\n"
+        print("*** JODIE initialization complete ***\n\n")
         
-    def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None):
+    def forward(self, user_embeddings, item_embeddings, timediffs=None, features=None, select=None, previous_items_embs=None):
         if select == 'item_update':
             input1 = torch.cat([user_embeddings, timediffs, features], dim=1)
             item_embedding_output = self.item_rnn(input1, item_embeddings)
@@ -83,13 +87,18 @@ class JODIE(nn.Module):
             return F.normalize(user_embedding_output)
 
         elif select == 'project':
-            user_projected_embedding = self.context_convert(user_embeddings, timediffs, features)
+            user_projected_embedding = self.context_convert_attn(user_embeddings, timediffs, features, previous_items_embs)
             #user_projected_embedding = torch.cat([input3, item_embeddings], dim=1)
             return user_projected_embedding
 
     def context_convert(self, embeddings, timediffs, features):
         new_embeddings = embeddings * (1 + self.embedding_layer(timediffs))
         return new_embeddings
+
+    def context_convert_attn(self, embeddings, timediffs, features, previous_items_embs):
+        # print(embeddings.shape, previous_items_embs)
+        new_embeddings, _ = self.attn_layer(embeddings.unsqueeze(0), key=previous_items_embs, value=previous_items_embs)
+        return new_embeddings.squeeze(0)
 
     def predict_label(self, user_embeddings):
         X_out = nn.ReLU()(self.linear_layer1(user_embeddings))
@@ -103,7 +112,7 @@ class JODIE(nn.Module):
 
 # INITIALIZE T-BATCH VARIABLES
 def reinitialize_tbatches():
-    global current_tbatches_interactionids, current_tbatches_user, current_tbatches_item, current_tbatches_timestamp, current_tbatches_feature, current_tbatches_label, current_tbatches_previous_item
+    global current_tbatches_interactionids, current_tbatches_user, current_tbatches_item, current_tbatches_timestamp, current_tbatches_feature, current_tbatches_label, current_tbatches_previous_item, current_tbatches_previous_items
     global tbatchid_user, tbatchid_item, current_tbatches_user_timediffs, current_tbatches_item_timediffs, current_tbatches_user_timediffs_next
 
     # list of users of each tbatch up to now
@@ -114,6 +123,7 @@ def reinitialize_tbatches():
     current_tbatches_feature = defaultdict(list)
     current_tbatches_label = defaultdict(list)
     current_tbatches_previous_item = defaultdict(list)
+    current_tbatches_previous_items = defaultdict(list)
     current_tbatches_user_timediffs = defaultdict(list)
     current_tbatches_item_timediffs = defaultdict(list)
     current_tbatches_user_timediffs_next = defaultdict(list)
@@ -141,7 +151,7 @@ def calculate_state_prediction_loss(model, tbatch_interactionids, user_embedding
 
 # SAVE TRAINED MODEL TO DISK
 def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, train_end_idx, user_embeddings_time_series=None, item_embeddings_time_series=None, path=PATH):
-    print "*** Saving embeddings and model ***"
+    print("*** Saving embeddings and model ***")
     state = {
             'user_embeddings': user_embeddings.data.cpu().numpy(),
             'item_embeddings': item_embeddings.data.cpu().numpy(),
@@ -161,7 +171,7 @@ def save_model(model, optimizer, args, epoch, user_embeddings, item_embeddings, 
 
     filename = os.path.join(directory, "checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.model, epoch, args.train_proportion))
     torch.save(state, filename)
-    print "*** Saved embeddings and model to file: %s ***\n\n" % filename
+    print("*** Saved embeddings and model to file: %s ***\n\n" % filename)
 
 
 # LOAD PREVIOUSLY TRAINED AND SAVED MODEL
@@ -169,7 +179,7 @@ def load_model(model, optimizer, args, epoch, device):
     modelname = args.model
     filename = PATH + "saved_models/%s/checkpoint.%s.ep%d.tp%.1f.pth.tar" % (args.network, modelname, epoch, args.train_proportion)
     checkpoint = torch.load(filename)
-    print "Loading saved embeddings and model: %s" % filename
+    print("Loading saved embeddings and model: %s" % filename)
     args.start_epoch = checkpoint['epoch']
     user_embeddings = Variable(torch.from_numpy(checkpoint['user_embeddings']).to(device))
     item_embeddings = Variable(torch.from_numpy(checkpoint['item_embeddings']).to(device))
