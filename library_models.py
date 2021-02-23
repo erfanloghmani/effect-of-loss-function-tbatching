@@ -72,8 +72,8 @@ class JODIE(nn.Module):
         self.linear_layer1 = nn.Linear(self.embedding_dim, 50)
         self.linear_layer2 = nn.Linear(50, 2)
         self.attn_layer = nn.MultiheadAttention(self.embedding_dim + self.time_dim, num_heads=1)
-        self.linear_fix_size = nn.Linear(self.embedding_dim + self.time_dim, self.embedding_dim)
-        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2, self.item_static_embedding_size + self.embedding_dim)
+        # self.linear_fix_size = nn.Linear(self.embedding_dim + self.time_dim, self.embedding_dim)
+        self.prediction_layer = nn.Linear(self.user_static_embedding_size + self.item_static_embedding_size + self.embedding_dim * 2 + self.time_dim, self.item_static_embedding_size + self.embedding_dim)
         self.embedding_layer = NormalLinear(1, self.embedding_dim)
         print("*** JODIE initialization complete ***\n\n")
         
@@ -103,7 +103,7 @@ class JODIE(nn.Module):
         embeddings_query = torch.cat([embeddings, time_enc[:, 0, :]], dim=1)
         embeddings_key = torch.cat([previous_items_embs, time_enc[:, 1:, :]], dim=2)
         new_embeddings, _ = self.attn_layer(embeddings_query.unsqueeze(0), key=embeddings_key, value=embeddings_key)
-        return self.linear_fix_size(new_embeddings.squeeze(0))
+        return new_embeddings.squeeze(0)
 
     def predict_label(self, user_embeddings):
         X_out = nn.ReLU()(self.linear_layer1(user_embeddings))
