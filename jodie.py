@@ -93,7 +93,7 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 all_total_losses = []
 
 if (args.init_epoch >= 0):
-    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch)
+    model, optimizer, user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, train_end_idx_training = load_model(model, optimizer, args, args.init_epoch, device)
     set_embeddings_training_end(user_embeddings_dystat, item_embeddings_dystat, user_embeddings_timeseries, item_embeddings_timeseries, user_sequence_id, item_sequence_id, train_end_idx)
 
     # LOAD THE EMBEDDINGS: DYNAMIC AND STATIC
@@ -107,12 +107,17 @@ if (args.init_epoch >= 0):
     user_embeddings_static = user_embeddings_dystat[:, args.embedding_dim:]
     user_embeddings_static = user_embeddings_static.clone()
 
+    initial_user_embedding = model.initial_user_embedding
+    initial_item_embedding = model.initial_item_embedding
+
+    user_embeddings = initial_user_embedding.repeat(num_users, 1)
+    item_embeddings = initial_item_embedding.repeat(num_items, 1)
 # RUN THE JODIE MODEL
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
 print "*** Training the JODIE model for %d epochs ***" % args.epochs
-with trange(args.epochs) as progress_bar1:
+with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
 
