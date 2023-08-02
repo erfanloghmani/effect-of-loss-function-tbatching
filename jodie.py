@@ -50,7 +50,7 @@ num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
 num_features = len(feature_sequence[0])
 true_labels_ratio = len(y_true) / (1.0 + sum(y_true))  # +1 in denominator in case there are no state change labels, which will throw an error.
-print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true))
+print("*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true)))
 
 # SET TRAINING, VALIDATION, TESTING, and TBATCH BOUNDARIES
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
@@ -113,7 +113,7 @@ if (args.init_epoch >= 0):
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
-print "*** Training the JODIE model for %d epochs ***" % args.epochs
+print("*** Training the JODIE model for %d epochs ***" % args.epochs)
 with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
@@ -164,7 +164,6 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
                 # AFTER ALL INTERACTIONS IN THE TIMESPAN ARE CONVERTED TO T-BATCHES, FORWARD PASS TO CREATE EMBEDDING TRAJECTORIES AND CALCULATE PREDICTION LOSS
                 if timestamp - tbatch_start_time > tbatch_timespan:
                     tbatch_start_time = timestamp  # RESET START TIME FOR THE NEXT TBATCHES
-
                     # ITERATE OVER ALL T-BATCHES
                     with trange(len(lib.current_tbatches_user)) as progress_bar3:
                         for i in progress_bar3:
@@ -197,9 +196,12 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
-                            # loss += predicted_item_embedding.shape[0] * MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
-
+                            if args.model == 'jodie':
+                                loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            elif args.model == 'jodie-sum':
+                                loss += predicted_item_embedding.shape[0] * MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            else:
+                                loss += MSELoss_sum(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
                             item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
@@ -236,7 +238,7 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
                     tbatch_to_insert = -1
 
         # END OF ONE EPOCH
-        print "\n\nTotal loss in this epoch = %f" % (total_loss)
+        print("\n\nTotal loss in this epoch = %f" % (total_loss))
         item_embeddings_dystat = torch.cat([item_embeddings, item_embedding_static], dim=1)
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
@@ -250,6 +252,6 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
 
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
-print "\n\n*** Training complete. Saving final model. ***\n\n"
+print("\n\n*** Training complete. Saving final model. ***\n\n")
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
 json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
