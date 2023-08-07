@@ -20,6 +20,7 @@ parser.add_argument('--network', required=True, help='Network name')
 parser.add_argument('--model', default='jodie', help="Model name")
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epoch', default=50, type=int, help='Epoch id to load')
+parser.add_argument('--run', default=0, type=int, help='Current run')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Proportion of training interactions')
 parser.add_argument("--state_change", default=False, action="store_true", help="True if training with state change of users along with interaction prediction. False otherwise. By default, set to True.")
@@ -29,7 +30,7 @@ args.datapath = "data/%s.csv" % args.network
 if args.train_proportion > 0.8:
     sys.exit('Training sequence proportion cannot be greater than 0.8.')
 if args.network == "mooc":
-    print "No interaction prediction for %s" % args.network
+    print("No interaction prediction for %s" % args.network)
     sys.exit(0)
 
 if args.device == 'gpu':
@@ -43,14 +44,14 @@ else:
     device = torch.device('cpu')
 
 # CHECK IF THE OUTPUT OF THE EPOCH IS ALREADY PROCESSED. IF SO, MOVE ON.
-output_fname = "results/interaction_prediction_%s_%s.txt" % (args.model, args.network)
+output_fname = "results/interaction_prediction_%s_%s_%s.txt" % (args.model, args.network, args.run)
 if os.path.exists(output_fname):
     f = open(output_fname, "r")
     search_string = 'Test performance of epoch %d' % args.epoch
     for line in f:
         line = line.strip()
         if search_string in line:
-            print "Output file already has results of epoch %d" % args.epoch
+            print("Output file already has results of epoch %d" % args.epoch)
             sys.exit(0)
     f.close()
 
@@ -65,11 +66,11 @@ num_features = len(feature_sequence[0])
 num_users = len(user2id)
 num_items = len(item2id) + 1
 true_labels_ratio = len(y_true) / (sum(y_true) + 1)
-print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true))
+print("*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true)))
 
 # SET TRAIN, VALIDATION, AND TEST BOUNDARIES
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
-test_start_idx = int(num_interactions * (args.train_proportion + 0.1))
+test_start_idx = int(num_interactions * (args.train_proportion + 0.05))
 test_end_idx = int(num_interactions * (args.train_proportion + 0.2))
 
 # SET BATCHING TIMESPAN
@@ -87,6 +88,7 @@ model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELoss_sum = nn.MSELoss(reduction='sum')
 CELoss = nn.CrossEntropyLoss()
 
 # INITIALIZE MODEL
@@ -128,8 +130,9 @@ Please note that since each interaction in validation and test is only seen once
 '''
 tbatch_start_time = None
 loss = 0
+edge_ranks = defaultdict(list)
 # FORWARD PASS
-print "*** Making interaction predictions by forward pass (no t-batching) ***"
+print("*** Making interaction predictions by forward pass (no t-batching) ***")
 with trange(train_end_idx, test_end_idx) as progress_bar:
     for j in progress_bar:
         progress_bar.set_description('%dth interaction for validation and testing' % j)
@@ -163,7 +166,12 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         predicted_item_embedding = model.predict_item_embedding(user_item_embedding)
 
         # CALCULATE PREDICTION LOSS
-        loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        if args.model == 'jodie':
+            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        elif args.model == 'jodie-sum':
+            loss += predicted_item_embedding.shape[0] * MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
+        else:
+            loss += MSELoss_sum(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static_input], dim=1).detach())
 
         # CALCULATE DISTANCE OF PREDICTED ITEM EMBEDDING TO ALL ITEMS
         euclidean_distances = nn.PairwiseDistance()(predicted_item_embedding.repeat(num_items, 1), torch.cat([item_embeddings, item_embeddings_static], dim=1)).squeeze(-1)
@@ -172,11 +180,12 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         true_item_distance = euclidean_distances[itemid]
         euclidean_distances_smaller = (euclidean_distances < true_item_distance).data.cpu().numpy()
         true_item_rank = np.sum(euclidean_distances_smaller) + 1
+        edge_ranks[str((userid, itemid))].append(int(true_item_rank))
 
         if j < test_start_idx:
-            validation_ranks.append(true_item_rank)
+            validation_ranks.append(int(true_item_rank))
         else:
-            test_ranks.append(true_item_rank)
+            test_ranks.append(int(true_item_rank))
 
         # UPDATE USER AND ITEM EMBEDDING
         user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
@@ -199,9 +208,9 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
         # UPDATE THE MODEL IN REAL-TIME USING ERRORS MADE IN THE PAST PREDICTION
         if timestamp - tbatch_start_time > tbatch_timespan:
             tbatch_start_time = timestamp
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+            # loss.backward()
+            # optimizer.step()
+            # optimizer.zero_grad()
 
             # RESET LOSS FOR NEXT T-BATCH
             loss = 0
@@ -210,9 +219,10 @@ with trange(train_end_idx, test_end_idx) as progress_bar:
             item_embeddings_timeseries.detach_()
             user_embeddings_timeseries.detach_()
 
-
-json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
-json.dump(test_ranks, open('results/test_ranks_%s_%s_%s.json' % (args.epoch, args.model, args.network), 'w'))
+# print(edge_ranks)
+json.dump(edge_ranks, open('results/edge_ranks_%s_%s_%s_%s.json' % (args.epoch, args.run, args.model, args.network), 'w'))
+json.dump(validation_ranks, open('results/validation_ranks_%s_%s_%s_%s.json' % (args.epoch, args.run, args.model, args.network), 'w'))
+json.dump(test_ranks, open('results/test_ranks_%s_%s_%s_%s.json' % (args.epoch, args.run, args.model, args.network), 'w'))
 # CALCULATE THE PERFORMANCE METRICS
 performance_dict = dict()
 ranks = validation_ranks
@@ -229,15 +239,15 @@ performance_dict['test'] = [mrr, rec10]
 fw = open(output_fname, "a")
 metrics = ['Mean Reciprocal Rank', 'Recall@10']
 
-print '\n\n*** Validation performance of epoch %d ***' % args.epoch
+print('\n\n*** Validation performance of epoch %d ***' % args.epoch)
 fw.write('\n\n*** Validation performance of epoch %d ***\n' % args.epoch)
-for i in xrange(len(metrics)):
+for i in range(len(metrics)):
     print(metrics[i] + ': ' + str(performance_dict['validation'][i]))
     fw.write("Validation: " + metrics[i] + ': ' + str(performance_dict['validation'][i]) + "\n")
 
-print '\n\n*** Test performance of epoch %d ***' % args.epoch
+print('\n\n*** Test performance of epoch %d ***' % args.epoch)
 fw.write('\n\n*** Test performance of epoch %d ***\n' % args.epoch)
-for i in xrange(len(metrics)):
+for i in range(len(metrics)):
     print(metrics[i] + ': ' + str(performance_dict['test'][i]))
     fw.write("Test: " + metrics[i] + ': ' + str(performance_dict['test'][i]) + "\n")
 

@@ -19,6 +19,7 @@ parser.add_argument('--network', required=True, help='Name of the network/datase
 parser.add_argument('--model', default="jodie", help='Model name to save output in file')
 parser.add_argument('--gpu', default=-1, type=int, help='ID of the gpu to run on. If set to -1 (default), the GPU with most free memory will be chosen.')
 parser.add_argument('--epochs', default=50, type=int, help='Number of epochs to train the model')
+parser.add_argument('--run', default=0, type=int, help='Current run')
 parser.add_argument('--init_epoch', default=-1, type=int, help='Init epoch to start train the model from')
 parser.add_argument('--embedding_dim', default=128, type=int, help='Number of dimensions of the dynamic embedding')
 parser.add_argument('--train_proportion', default=0.8, type=float, help='Fraction of interactions (from the beginning) that are used for training.The next 10% are used for validation and the next 10% for testing')
@@ -49,7 +50,7 @@ num_users = len(user2id)
 num_items = len(item2id) + 1  # one extra item for "none-of-these"
 num_features = len(feature_sequence[0])
 true_labels_ratio = len(y_true) / (1.0 + sum(y_true))  # +1 in denominator in case there are no state change labels, which will throw an error.
-print "*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true))
+print("*** Network statistics:\n  %d users\n  %d items\n  %d interactions\n  %d/%d true labels ***\n\n" % (num_users, num_items, num_interactions, sum(y_true), len(y_true)))
 
 # SET TRAINING, VALIDATION, TESTING, and TBATCH BOUNDARIES
 train_end_idx = validation_start_idx = int(num_interactions * args.train_proportion)
@@ -65,13 +66,14 @@ Longer timespans mean more interactions are processed and the training time is r
 Longer timespan leads to less frequent model updates.
 '''
 timespan = timestamp_sequence[-1] - timestamp_sequence[0]
-tbatch_timespan = timespan / 500
+tbatch_timespan = timespan / 100
 
 # INITIALIZE MODEL AND PARAMETERS
 model = JODIE(args, num_features, num_users, num_items).to(device)
 weight = torch.Tensor([1, true_labels_ratio]).to(device)
 crossEntropyLoss = nn.CrossEntropyLoss(weight=weight)
 MSELoss = nn.MSELoss()
+MSELoss_sum = nn.MSELoss(reduction='sum')
 CELoss = nn.CrossEntropyLoss()
 
 # INITIALIZE EMBEDDING
@@ -116,10 +118,12 @@ if (args.init_epoch >= 0):
 '''
 THE MODEL IS TRAINED FOR SEVERAL EPOCHS. IN EACH EPOCH, JODIES USES THE TRAINING SET OF INTERACTIONS TO UPDATE ITS PARAMETERS.
 '''
-print "*** Training the JODIE model for %d epochs ***" % args.epochs
+print("*** Training the JODIE model for %d epochs ***" % args.epochs)
 with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
     for ep in progress_bar1:
         progress_bar1.set_description('Epoch %d of %d' % (ep, args.epochs))
+
+        edge_len_tbatches = defaultdict(list)
 
         # INITIALIZE EMBEDDING TRAJECTORY STORAGE
         user_embeddings_timeseries = Variable(torch.Tensor(num_interactions, args.embedding_dim).to(device))
@@ -165,10 +169,14 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
                 # AFTER ALL INTERACTIONS IN THE TIMESPAN ARE CONVERTED TO T-BATCHES, FORWARD PASS TO CREATE EMBEDDING TRAJECTORIES AND CALCULATE PREDICTION LOSS
                 if timestamp - tbatch_start_time > tbatch_timespan:
                     tbatch_start_time = timestamp  # RESET START TIME FOR THE NEXT TBATCHES
-
                     # ITERATE OVER ALL T-BATCHES
                     with trange(len(lib.current_tbatches_user)) as progress_bar3:
                         for i in progress_bar3:
+
+                            for xidx in range(len(lib.current_tbatches_user[i])):
+                                userid = lib.current_tbatches_user[i][xidx]
+                                itemid = lib.current_tbatches_item[i][xidx]
+                                edge_len_tbatches[str((userid, itemid))].append(len(lib.current_tbatches_user[i]))
                             progress_bar3.set_description('Processed %d of %d T-batches ' % (i, len(lib.current_tbatches_user)))
 
                             total_interaction_count += len(lib.current_tbatches_interactionids[i])
@@ -193,8 +201,12 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
 
                             # CALCULATE PREDICTION LOSS
                             item_embedding_input = item_embeddings[tbatch_itemids, :]
-                            loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
-
+                            if args.model == 'jodie':
+                                loss += MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            elif args.model == 'jodie-sum':
+                                loss += predicted_item_embedding.shape[0] * MSELoss(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
+                            else:
+                                loss += MSELoss_sum(predicted_item_embedding, torch.cat([item_embedding_input, item_embedding_static[tbatch_itemids, :]], dim=1).detach())
                             # UPDATE DYNAMIC EMBEDDINGS AFTER INTERACTION
                             user_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=user_timediffs_tensor, features=feature_tensor, select='user_update')
                             item_embedding_output = model.forward(user_embedding_input, item_embedding_input, timediffs=item_timediffs_tensor, features=feature_tensor, select='item_update')
@@ -231,18 +243,20 @@ with trange(args.init_epoch + 1, args.epochs) as progress_bar1:
                     tbatch_to_insert = -1
 
         # END OF ONE EPOCH
-        print "\n\nTotal loss in this epoch = %f" % (total_loss)
+        print("\n\nTotal loss in this epoch = %f" % (total_loss))
         item_embeddings_dystat = torch.cat([item_embeddings, item_embedding_static], dim=1)
         user_embeddings_dystat = torch.cat([user_embeddings, user_embedding_static], dim=1)
         # SAVE CURRENT MODEL TO DISK TO BE USED IN EVALUATION.
         save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
         all_total_losses.append(total_loss)
+
+        json.dump(edge_len_tbatches, open('results/jodie_%s_%s_%s_%s_tbatch_len.json' % (args.network, args.run, args.model, ep), 'w'))
         json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
 
         user_embeddings = initial_user_embedding.repeat(num_users, 1)
         item_embeddings = initial_item_embedding.repeat(num_items, 1)
 
 # END OF ALL EPOCHS. SAVE FINAL MODEL DISK TO BE USED IN EVALUATION.
-print "\n\n*** Training complete. Saving final model. ***\n\n"
+print("\n\n*** Training complete. Saving final model. ***\n\n")
 save_model(model, optimizer, args, ep, user_embeddings_dystat, item_embeddings_dystat, train_end_idx, user_embeddings_timeseries, item_embeddings_timeseries)
 json.dump(all_total_losses, open('results/jodie_%s_training_total_losses.json' % args.network, 'w'))
