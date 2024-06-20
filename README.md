@@ -29,12 +29,18 @@ The dataset `.csv` files should be placed in the `data/` directory. For the Myke
 If you use this code in your research or work, please cite the following [preprint](https://arxiv.org/abs/2308.06862):
 
 ```
-@misc{loghmani2023effect,
-      title={Effect of Choosing Loss Function when Using T-batching for Representation Learning on Dynamic Networks}, 
-      author={Erfan Loghmani and MohammadAmin Fazli},
-      year={2023},
-      eprint={2308.06862},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+@article{loghmani2023effect,
+  author       = {Erfan Loghmani and MohammadAmin Fazli},
+  title        = {Effect of Choosing Loss Function when Using T-batching for Representation Learning on Dynamic Networks},
+  journal      = {CoRR},
+  volume       = {abs/2308.06862},
+  year         = {2023},
+  url          = {https://doi.org/10.48550/arXiv.2308.06862},
+  doi          = {10.48550/ARXIV.2308.06862},
+  eprinttype    = {arXiv},
+  eprint       = {2308.06862},
+  timestamp    = {Wed, 23 Aug 2023 14:43:32 +0200},
+  biburl       = {https://dblp.org/rec/journals/corr/abs-2308-06862.bib},
+  bibsource    = {dblp computer science bibliography, https://dblp.org}
 }
 ```
